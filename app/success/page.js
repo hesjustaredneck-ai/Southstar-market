@@ -1,0 +1,1 @@
+export default function Success(){return <main className="wrap"><p className="eyebrow">ORDER CONFIRMED</p><h1>Thank you.</h1><p className="notice">Your payment was submitted successfully.</p><a className="btn primary" href="/">Return to Southstar</a></main>}
