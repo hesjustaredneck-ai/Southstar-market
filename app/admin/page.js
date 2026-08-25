@@ -45,48 +45,70 @@ async function addProduct(fd) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const { error: uploadError } = await db.storage
-      .from("product-images")
+      .from("Product-image")
       .upload(path, buffer, {
         contentType: file.type || "image/jpeg",
         upsert: false,
       });
 
     if (uploadError) {
-      throw new Error(`Image upload failed: ${uploadError.message}`);
+      throw new Error(
+        `Image upload failed: ${uploadError.message}`
+      );
     }
 
     const { data } = db.storage
-      .from("product-images")
+      .from("Product-image")
       .getPublicUrl(path);
 
     imageUrls.push(data.publicUrl);
   }
 
-  await db.from("products").insert({
-    name: String(fd.get("name") || ""),
-    description: String(fd.get("description") || ""),
-    category: String(fd.get("category") || ""),
+  const { error: insertError } = await db
+    .from("products")
+    .insert({
+      name: String(fd.get("name") || ""),
+      description: String(fd.get("description") || ""),
+      category: String(fd.get("category") || ""),
 
-    // First photo stays here for compatibility with the existing storefront.
-    image_url: imageUrls[0] || "",
-    image_urls: imageUrls,
+      // First image is used by the existing storefront.
+      image_url: imageUrls[0] || "",
 
-    price: Number(fd.get("price")),
-    cost: Number(fd.get("cost")),
+      // All uploaded images are stored here.
+      image_urls: imageUrls,
 
-    supplier: String(fd.get("supplier") || "aliexpress"),
-    supplier_url: String(fd.get("supplier_url") || ""),
-    supplier_product_id: String(
-      fd.get("supplier_product_id") || ""
-    ),
-    supplier_variant_id: String(
-      fd.get("supplier_variant_id") || ""
-    ),
-    supplier_sku: String(fd.get("supplier_sku") || ""),
+      price: Number(fd.get("price")),
+      cost: Number(fd.get("cost")),
 
-    auto_fulfill: false,
-    active: true,
-  });
+      supplier: String(
+        fd.get("supplier") || "aliexpress"
+      ),
+
+      supplier_url: String(
+        fd.get("supplier_url") || ""
+      ),
+
+      supplier_product_id: String(
+        fd.get("supplier_product_id") || ""
+      ),
+
+      supplier_variant_id: String(
+        fd.get("supplier_variant_id") || ""
+      ),
+
+      supplier_sku: String(
+        fd.get("supplier_sku") || ""
+      ),
+
+      auto_fulfill: false,
+      active: true,
+    });
+
+  if (insertError) {
+    throw new Error(
+      `Product creation failed: ${insertError.message}`
+    );
+  }
 
   redirect("/admin");
 }
@@ -95,6 +117,7 @@ async function logout() {
   "use server";
 
   const s = await createClient();
+
   await s.auth.signOut();
 
   redirect("/login");
@@ -244,6 +267,7 @@ export default async function Admin() {
             </p>
 
             <p>{order.customer_email}</p>
+
             <p>{order.shipping_address}</p>
 
             <p>
