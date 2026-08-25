@@ -1,9 +1,11 @@
+import { randomUUID } from "crypto";
 import { createClient } from "../../lib/supabase/server";
 import { createAdminClient } from "../../lib/supabase/admin";
 import { redirect } from "next/navigation";
 
 async function requireAdmin() {
   const s = await createClient();
+
   const {
     data: { user },
   } = await s.auth.getUser();
@@ -28,21 +30,60 @@ async function addProduct(fd) {
 
   const db = createAdminClient();
 
+  const files = fd
+    .getAll("images")
+    .filter((file) => file instanceof File && file.size > 0);
+
+  const imageUrls = [];
+
+  for (const file of files) {
+    const extension =
+      file.name.split(".").pop()?.toLowerCase() || "jpg";
+
+    const path = `${Date.now()}-${randomUUID()}.${extension}`;
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    const { error: uploadError } = await db.storage
+      .from("product-images")
+      .upload(path, buffer, {
+        contentType: file.type || "image/jpeg",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new Error(`Image upload failed: ${uploadError.message}`);
+    }
+
+    const { data } = db.storage
+      .from("product-images")
+      .getPublicUrl(path);
+
+    imageUrls.push(data.publicUrl);
+  }
+
   await db.from("products").insert({
     name: String(fd.get("name") || ""),
     description: String(fd.get("description") || ""),
     category: String(fd.get("category") || ""),
-    image_url: String(fd.get("image_url") || ""),
+
+    // First photo stays here for compatibility with the existing storefront.
+    image_url: imageUrls[0] || "",
+    image_urls: imageUrls,
+
     price: Number(fd.get("price")),
     cost: Number(fd.get("cost")),
-    supplier_url: String(fd.get("supplier_url") || ""),
 
     supplier: String(fd.get("supplier") || "aliexpress"),
-    supplier_product_id: String(fd.get("supplier_product_id") || ""),
-    supplier_variant_id: String(fd.get("supplier_variant_id") || ""),
+    supplier_url: String(fd.get("supplier_url") || ""),
+    supplier_product_id: String(
+      fd.get("supplier_product_id") || ""
+    ),
+    supplier_variant_id: String(
+      fd.get("supplier_variant_id") || ""
+    ),
     supplier_sku: String(fd.get("supplier_sku") || ""),
 
-    // Keep this false until we intentionally turn on automated fulfillment.
     auto_fulfill: false,
     active: true,
   });
@@ -55,6 +96,7 @@ async function logout() {
 
   const s = await createClient();
   await s.auth.signOut();
+
   redirect("/login");
 }
 
@@ -63,18 +105,23 @@ export default async function Admin() {
 
   const db = createAdminClient();
 
-  const [{ data: products }, { data: orders }] = await Promise.all([
-    db.from("products").select("*").order("created_at", {
-      ascending: false,
-    }),
-    db.from("orders").select("*").order("created_at", {
-      ascending: false,
-    }),
-  ]);
+  const [{ data: products }, { data: orders }] =
+    await Promise.all([
+      db
+        .from("products")
+        .select("*")
+        .order("created_at", { ascending: false }),
+
+      db
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false }),
+    ]);
 
   const revenue =
     (orders || []).reduce(
-      (sum, order) => sum + Number(order.amount_total || 0),
+      (sum, order) =>
+        sum + Number(order.amount_total || 0),
       0
     ) / 100;
 
@@ -128,10 +175,15 @@ export default async function Admin() {
             placeholder="Category"
           />
 
-          <input
-            name="image_url"
-            placeholder="Image URL"
-          />
+          <label>
+            Product images
+            <input
+              name="images"
+              type="file"
+              accept="image/*"
+              multiple
+            />
+          </label>
 
           <input
             name="price"
@@ -186,7 +238,9 @@ export default async function Admin() {
         {(orders || []).map((order) => (
           <div key={order.id}>
             <p>
-              <strong>{order.customer_name || "Customer"}</strong>
+              <strong>
+                {order.customer_name || "Customer"}
+              </strong>
             </p>
 
             <p>{order.customer_email}</p>
@@ -194,7 +248,9 @@ export default async function Admin() {
 
             <p>
               Amount: $
-              {(Number(order.amount_total || 0) / 100).toFixed(2)}
+              {(
+                Number(order.amount_total || 0) / 100
+              ).toFixed(2)}
             </p>
 
             <p>
@@ -202,7 +258,9 @@ export default async function Admin() {
             </p>
 
             <p>
-              Fulfillment: {order.fulfillment_status || "unfulfilled"}
+              Fulfillment:{" "}
+              {order.fulfillment_status ||
+                "unfulfilled"}
             </p>
 
             <pre>
