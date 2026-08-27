@@ -37,8 +37,13 @@ function buildVariants(fd, basePrice, baseCost) {
 
     if (!name) continue;
 
-    const priceValue = String(prices[i] || "").trim();
-    const costValue = String(costs[i] || "").trim();
+    const priceValue = String(
+      prices[i] || ""
+    ).trim();
+
+    const costValue = String(
+      costs[i] || ""
+    ).trim();
 
     variants.push({
       name,
@@ -109,7 +114,9 @@ async function uploadImages(db, files) {
       .from("Product-image")
       .getPublicUrl(path);
 
-    imageUrls.push(data.publicUrl);
+    imageUrls.push(
+      data.publicUrl
+    );
   }
 
   return imageUrls;
@@ -120,7 +127,8 @@ async function addProduct(fd) {
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const files = fd
     .getAll("images")
@@ -131,13 +139,20 @@ async function addProduct(fd) {
     );
 
   const imageUrls =
-    await uploadImages(db, files);
+    await uploadImages(
+      db,
+      files
+    );
 
   const basePrice =
-    Number(fd.get("price") || 0);
+    Number(
+      fd.get("price") || 0
+    );
 
   const baseCost =
-    Number(fd.get("cost") || 0);
+    Number(
+      fd.get("cost") || 0
+    );
 
   const variants =
     buildVariants(
@@ -149,18 +164,20 @@ async function addProduct(fd) {
   const { error } = await db
     .from("products")
     .insert({
-      name:
-        String(fd.get("name") || ""),
+      name: String(
+        fd.get("name") || ""
+      ),
 
-      description:
-        String(
-          fd.get("description") || ""
-        ),
+      description: String(
+        fd.get(
+          "description"
+        ) || ""
+      ),
 
-      category:
-        String(
-          fd.get("category") || ""
-        ),
+      category: String(
+        fd.get("category") ||
+          ""
+      ),
 
       image_url:
         imageUrls[0] || "",
@@ -174,16 +191,16 @@ async function addProduct(fd) {
       cost:
         baseCost,
 
-      supplier:
-        String(
-          fd.get("supplier") ||
-            "aliexpress"
-        ),
+      supplier: String(
+        fd.get("supplier") ||
+          "aliexpress"
+      ),
 
-      supplier_url:
-        String(
-          fd.get("supplier_url") || ""
-        ),
+      supplier_url: String(
+        fd.get(
+          "supplier_url"
+        ) || ""
+      ),
 
       supplier_product_id:
         String(
@@ -199,16 +216,19 @@ async function addProduct(fd) {
           ) || ""
         ),
 
-      supplier_sku:
-        String(
-          fd.get("supplier_sku") || ""
-        ),
+      supplier_sku: String(
+        fd.get(
+          "supplier_sku"
+        ) || ""
+      ),
 
       variants,
 
-      auto_fulfill: false,
+      auto_fulfill:
+        false,
 
-      active: true,
+      active:
+        true,
     });
 
   if (error) {
@@ -225,10 +245,14 @@ async function updateProduct(fd) {
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const productId =
-    String(fd.get("product_id") || "");
+    String(
+      fd.get("product_id") ||
+        ""
+    );
 
   if (!productId) {
     throw new Error(
@@ -242,7 +266,10 @@ async function updateProduct(fd) {
   } = await db
     .from("products")
     .select("*")
-    .eq("id", productId)
+    .eq(
+      "id",
+      productId
+    )
     .maybeSingle();
 
   if (
@@ -270,7 +297,8 @@ async function updateProduct(fd) {
       : [];
 
   let mainImage =
-    existing.image_url || "";
+    existing.image_url ||
+    "";
 
   if (files.length > 0) {
     imageUrls =
@@ -284,10 +312,14 @@ async function updateProduct(fd) {
   }
 
   const basePrice =
-    Number(fd.get("price") || 0);
+    Number(
+      fd.get("price") || 0
+    );
 
   const baseCost =
-    Number(fd.get("cost") || 0);
+    Number(
+      fd.get("cost") || 0
+    );
 
   const variants =
     buildVariants(
@@ -299,18 +331,22 @@ async function updateProduct(fd) {
   const { error } = await db
     .from("products")
     .update({
-      name:
-        String(fd.get("name") || ""),
+      name: String(
+        fd.get("name") ||
+          ""
+      ),
 
-      description:
-        String(
-          fd.get("description") || ""
-        ),
+      description: String(
+        fd.get(
+          "description"
+        ) || ""
+      ),
 
-      category:
-        String(
-          fd.get("category") || ""
-        ),
+      category: String(
+        fd.get(
+          "category"
+        ) || ""
+      ),
 
       image_url:
         mainImage,
@@ -324,16 +360,16 @@ async function updateProduct(fd) {
       cost:
         baseCost,
 
-      supplier:
-        String(
-          fd.get("supplier") ||
-            "aliexpress"
-        ),
+      supplier: String(
+        fd.get("supplier") ||
+          "aliexpress"
+      ),
 
-      supplier_url:
-        String(
-          fd.get("supplier_url") || ""
-        ),
+      supplier_url: String(
+        fd.get(
+          "supplier_url"
+        ) || ""
+      ),
 
       supplier_product_id:
         String(
@@ -349,14 +385,18 @@ async function updateProduct(fd) {
           ) || ""
         ),
 
-      supplier_sku:
-        String(
-          fd.get("supplier_sku") || ""
-        ),
+      supplier_sku: String(
+        fd.get(
+          "supplier_sku"
+        ) || ""
+      ),
 
       variants,
     })
-    .eq("id", productId);
+    .eq(
+      "id",
+      productId
+    );
 
   if (error) {
     throw new Error(
@@ -372,24 +412,33 @@ async function toggleProduct(fd) {
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const productId =
     String(
-      fd.get("product_id") || ""
+      fd.get("product_id") ||
+        ""
     );
 
   const currentActive =
     String(
-      fd.get("current_active")
-    ).toLowerCase() === "true";
+      fd.get(
+        "current_active"
+      )
+    ).toLowerCase() ===
+    "true";
 
   const { error } = await db
     .from("products")
     .update({
-      active: !currentActive,
+      active:
+        !currentActive,
     })
-    .eq("id", productId);
+    .eq(
+      "id",
+      productId
+    );
 
   if (error) {
     throw new Error(
@@ -405,11 +454,13 @@ async function deleteProduct(fd) {
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const productId =
     String(
-      fd.get("product_id") || ""
+      fd.get("product_id") ||
+        ""
     );
 
   const confirmation =
@@ -433,7 +484,10 @@ async function deleteProduct(fd) {
   const { error } = await db
     .from("products")
     .delete()
-    .eq("id", productId);
+    .eq(
+      "id",
+      productId
+    );
 
   if (error) {
     throw new Error(
@@ -449,11 +503,13 @@ async function updateOrder(fd) {
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const orderId =
     String(
-      fd.get("order_id") || ""
+      fd.get("order_id") ||
+        ""
     );
 
   if (!orderId) {
@@ -468,7 +524,10 @@ async function updateOrder(fd) {
   } = await db
     .from("orders")
     .select("*")
-    .eq("id", orderId)
+    .eq(
+      "id",
+      orderId
+    )
     .maybeSingle();
 
   if (
@@ -489,12 +548,14 @@ async function updateOrder(fd) {
 
   const supplierCostValue =
     String(
-      fd.get("supplier_cost") ||
-        ""
+      fd.get(
+        "supplier_cost"
+      ) || ""
     ).trim();
 
   const supplierCost =
-    supplierCostValue === ""
+    supplierCostValue ===
+    ""
       ? null
       : Number(
           supplierCostValue
@@ -528,7 +589,8 @@ async function updateOrder(fd) {
 
     carrier:
       String(
-        fd.get("carrier") || ""
+        fd.get("carrier") ||
+          ""
       ).trim(),
 
     supplier_order_id:
@@ -582,7 +644,10 @@ async function updateOrder(fd) {
   const { error } = await db
     .from("orders")
     .update(updates)
-    .eq("id", orderId);
+    .eq(
+      "id",
+      orderId
+    );
 
   if (error) {
     throw new Error(
@@ -602,6 +667,579 @@ async function logout() {
   await s.auth.signOut();
 
   redirect("/login");
+}
+
+/*
+  DSERS CSV HELPERS
+*/
+
+const DSERS_PRODUCT_HEADERS =
+  [
+    "product_id",
+    "SKU（your product SKU）",
+    "Supplier_url（Optional）",
+    "SKU（Supplier SKU）（Optional）",
+  ];
+
+const DSERS_ORDER_HEADERS =
+  [
+    "Order_number",
+    "Date",
+    "Country(Short Name of Country)",
+    "Product_id",
+    "Sku",
+    "Product_count",
+    "Order_memo",
+    "Contact_person",
+    "Mobile_no",
+    "Email(Optional)",
+    "Address",
+    "Address2",
+    "Province",
+    "City",
+    "ZIP",
+    "RUT(Chile; Optional)",
+    "Personal Clearance ID(Korea, Oman; Optional)",
+    "Passport/Alien registration Card Number(Korea, Oman; Optional)",
+    "CPF(Brazil; Optional)",
+    "Turkish ID Number(Turkey; Optional)",
+    "Passport Number(Turkey; Optional)",
+    "RUC(Peru; Optional)",
+    "RFC/CURP(Mexico; Optional)",
+  ];
+
+function csvCell(value) {
+  const text =
+    String(
+      value ?? ""
+    );
+
+  return `"${text.replace(
+    /"/g,
+    '""'
+  )}"`;
+}
+
+function rowsToCsv(
+  headers,
+  rows
+) {
+  return [
+    headers,
+    ...rows,
+  ]
+    .map((row) =>
+      row
+        .map(csvCell)
+        .join(",")
+    )
+    .join("\r\n");
+}
+
+function csvDownloadHref(csv) {
+  const content =
+    `\uFEFF${csv}`;
+
+  return (
+    "data:text/csv;charset=utf-8," +
+    encodeURIComponent(
+      content
+    )
+  );
+}
+
+function cleanText(value) {
+  return String(
+    value || ""
+  )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+function cleanDsersAddress(
+  value
+) {
+  return cleanText(value)
+    .replace(
+      /[^a-zA-Z0-9\s-]/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+function cleanDsersPhone(
+  value
+) {
+  const original =
+    cleanText(value);
+
+  const hasPlus =
+    original.startsWith(
+      "+"
+    );
+
+  const digits =
+    original.replace(
+      /\D/g,
+      ""
+    );
+
+  if (!digits) {
+    return "";
+  }
+
+  return (
+    (hasPlus ? "+" : "") +
+    digits
+  );
+}
+
+function fullCountryName(
+  value
+) {
+  const country =
+    cleanText(value);
+
+  const upper =
+    country.toUpperCase();
+
+  if (
+    upper === "US" ||
+    upper === "USA" ||
+    upper ===
+      "UNITED STATES OF AMERICA"
+  ) {
+    return "United States";
+  }
+
+  return country;
+}
+
+function makeDsersSkuFromProduct(
+  product,
+  variant = null,
+  variantIndex = 0
+) {
+  const variantSupplierSku =
+    cleanText(
+      variant?.supplier_sku
+    );
+
+  if (
+    variantSupplierSku
+  ) {
+    return variantSupplierSku;
+  }
+
+  if (variant) {
+    const variantId =
+      cleanText(
+        variant
+          ?.supplier_variant_id
+      );
+
+    if (variantId) {
+      return (
+        `SS-${product.id}-${variantId}`
+      );
+    }
+
+    return (
+      `SS-${product.id}-V${variantIndex + 1}`
+    );
+  }
+
+  const productSupplierSku =
+    cleanText(
+      product.supplier_sku
+    );
+
+  if (
+    productSupplierSku
+  ) {
+    return productSupplierSku;
+  }
+
+  return `SS-${product.id}`;
+}
+
+function makeDsersSkuFromItem(
+  item
+) {
+  const supplierSku =
+    cleanText(
+      item.supplier_sku
+    );
+
+  if (supplierSku) {
+    return supplierSku;
+  }
+
+  const productId =
+    cleanText(
+      item.product_id
+    );
+
+  const variantId =
+    cleanText(
+      item.supplier_variant_id
+    );
+
+  const hasVariant =
+    Boolean(
+      cleanText(
+        item.variant_name
+      )
+    );
+
+  if (
+    hasVariant &&
+    variantId
+  ) {
+    return (
+      `SS-${productId}-${variantId}`
+    );
+  }
+
+  if (productId) {
+    return `SS-${productId}`;
+  }
+
+  return "";
+}
+
+function buildDsersProductsCsv(
+  products
+) {
+  const rows = [];
+
+  for (
+    const product of products
+  ) {
+    const variants =
+      Array.isArray(
+        product.variants
+      )
+        ? product.variants
+        : [];
+
+    if (
+      variants.length >
+      0
+    ) {
+      variants.forEach(
+        (
+          variant,
+          index
+        ) => {
+          rows.push([
+            product.id,
+
+            makeDsersSkuFromProduct(
+              product,
+              variant,
+              index
+            ),
+
+            cleanText(
+              product
+                .supplier_url
+            ),
+
+            cleanText(
+              variant
+                .supplier_sku
+            ),
+          ]);
+        }
+      );
+
+      continue;
+    }
+
+    rows.push([
+      product.id,
+
+      makeDsersSkuFromProduct(
+        product
+      ),
+
+      cleanText(
+        product.supplier_url
+      ),
+
+      cleanText(
+        product.supplier_sku
+      ),
+    ]);
+  }
+
+  return rowsToCsv(
+    DSERS_PRODUCT_HEADERS,
+    rows
+  );
+}
+
+function formatDsersDate(
+  value
+) {
+  const date =
+    value
+      ? new Date(value)
+      : new Date();
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return new Date()
+      .toISOString()
+      .slice(0, 10);
+  }
+
+  return date
+    .toISOString()
+    .slice(0, 10);
+}
+
+function getDsersOrderMissingInfo(
+  order,
+  items
+) {
+  const missing = [];
+
+  if (
+    !cleanText(
+      order.customer_phone
+    )
+  ) {
+    missing.push(
+      "Customer phone"
+    );
+  }
+
+  if (
+    !cleanText(
+      order
+        .shipping_address_line1
+    )
+  ) {
+    missing.push(
+      "Street address"
+    );
+  }
+
+  if (
+    !cleanText(
+      order.shipping_city
+    )
+  ) {
+    missing.push(
+      "City"
+    );
+  }
+
+  if (
+    !cleanText(
+      order.shipping_state
+    )
+  ) {
+    missing.push(
+      "State"
+    );
+  }
+
+  if (
+    !cleanText(
+      order
+        .shipping_postal_code
+    )
+  ) {
+    missing.push(
+      "ZIP code"
+    );
+  }
+
+  if (
+    !cleanText(
+      order
+        .shipping_country
+    )
+  ) {
+    missing.push(
+      "Country"
+    );
+  }
+
+  if (
+    !Array.isArray(
+      items
+    ) ||
+    items.length === 0
+  ) {
+    missing.push(
+      "Order items"
+    );
+
+    return missing;
+  }
+
+  items.forEach(
+    (item, index) => {
+      const productId =
+        cleanText(
+          item.product_id
+        );
+
+      if (!productId) {
+        missing.push(
+          `Item ${index + 1} product ID`
+        );
+      }
+
+      const hasVariant =
+        Boolean(
+          cleanText(
+            item.variant_name
+          )
+        );
+
+      if (
+        hasVariant &&
+        !cleanText(
+          item.supplier_sku
+        ) &&
+        !cleanText(
+          item
+            .supplier_variant_id
+        )
+      ) {
+        missing.push(
+          `Item ${index + 1} variant mapping`
+        );
+      }
+
+      if (
+        !makeDsersSkuFromItem(
+          item
+        )
+      ) {
+        missing.push(
+          `Item ${index + 1} SKU`
+        );
+      }
+    }
+  );
+
+  return missing;
+}
+
+function buildDsersOrderCsv(
+  order,
+  items
+) {
+  const orderNumber =
+    cleanText(order.id) ||
+    cleanText(
+      order.stripe_session_id
+    );
+
+  const date =
+    formatDsersDate(
+      order.created_at
+    );
+
+  const country =
+    fullCountryName(
+      order.shipping_country
+    );
+
+  const mobile =
+    cleanDsersPhone(
+      order.customer_phone
+    );
+
+  const address1 =
+    cleanDsersAddress(
+      order
+        .shipping_address_line1
+    );
+
+  const address2 =
+    cleanDsersAddress(
+      order
+        .shipping_address_line2
+    );
+
+  const rows =
+    items.map((item) => [
+      orderNumber,
+      date,
+      country,
+
+      cleanText(
+        item.product_id
+      ),
+
+      makeDsersSkuFromItem(
+        item
+      ),
+
+      Number(
+        item.quantity || 1
+      ),
+
+      "",
+
+      cleanText(
+        order.customer_name
+      ),
+
+      mobile,
+
+      cleanText(
+        order.customer_email
+      ),
+
+      address1,
+
+      address2,
+
+      cleanText(
+        order.shipping_state
+      ),
+
+      cleanText(
+        order.shipping_city
+      ),
+
+      cleanText(
+        order
+          .shipping_postal_code
+      ),
+
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+
+  return rowsToCsv(
+    DSERS_ORDER_HEADERS,
+    rows
+  );
 }
 
 function VariantRow({
@@ -636,7 +1274,8 @@ function VariantRow({
         type="number"
         step="0.01"
         defaultValue={
-          variant?.price ?? ""
+          variant?.price ??
+          ""
         }
         placeholder="Selling price -- blank = main price"
       />
@@ -646,7 +1285,8 @@ function VariantRow({
         type="number"
         step="0.01"
         defaultValue={
-          variant?.cost ?? ""
+          variant?.cost ??
+          ""
         }
         placeholder="Supplier cost -- blank = main cost"
       />
@@ -688,18 +1328,20 @@ function ProductEditor({
     <details
       className="panel"
       style={{
-        marginTop: "16px",
+        marginTop:
+          "16px",
       }}
     >
       <summary
         style={{
-          cursor: "pointer",
-          fontWeight: "700",
+          cursor:
+            "pointer",
+          fontWeight:
+            "700",
         }}
       >
         {product.name}
-        {" -- "}
-        $
+        {" -- "}$
         {Number(
           product.price || 0
         ).toFixed(2)}
@@ -711,23 +1353,29 @@ function ProductEditor({
 
       <div
         style={{
-          marginTop: "20px",
+          marginTop:
+            "20px",
         }}
       >
         <form
-          action={updateProduct}
+          action={
+            updateProduct
+          }
           className="form"
         >
           <input
             type="hidden"
             name="product_id"
-            value={product.id}
+            value={
+              product.id
+            }
           />
 
           <input
             name="name"
             defaultValue={
-              product.name || ""
+              product.name ||
+              ""
             }
             placeholder="Product name"
             required
@@ -752,7 +1400,8 @@ function ProductEditor({
           />
 
           <label>
-            Replace product images
+            Replace product
+            images
 
             <input
               name="images"
@@ -773,7 +1422,8 @@ function ProductEditor({
             type="number"
             step="0.01"
             defaultValue={
-              product.price ?? ""
+              product.price ??
+              ""
             }
             placeholder="Southstar price"
             required
@@ -784,7 +1434,8 @@ function ProductEditor({
             type="number"
             step="0.01"
             defaultValue={
-              product.cost ?? ""
+              product.cost ??
+              ""
             }
             placeholder="Supplier cost"
           />
@@ -801,7 +1452,8 @@ function ProductEditor({
           <input
             name="supplier_url"
             defaultValue={
-              product.supplier_url ||
+              product
+                .supplier_url ||
               ""
             }
             placeholder="AliExpress product URL"
@@ -830,7 +1482,8 @@ function ProductEditor({
           <input
             name="supplier_sku"
             defaultValue={
-              product.supplier_sku ||
+              product
+                .supplier_sku ||
               ""
             }
             placeholder="Default supplier SKU"
@@ -845,12 +1498,16 @@ function ProductEditor({
           {[0, 1, 2, 3, 4, 5].map(
             (index) => (
               <VariantRow
-                key={index}
+                key={
+                  index
+                }
                 number={
                   index + 1
                 }
                 variant={
-                  variants[index] ||
+                  variants[
+                    index
+                  ] ||
                   null
                 }
               />
@@ -873,12 +1530,16 @@ function ProductEditor({
         />
 
         <form
-          action={toggleProduct}
+          action={
+            toggleProduct
+          }
         >
           <input
             type="hidden"
             name="product_id"
-            value={product.id}
+            value={
+              product.id
+            }
           />
 
           <input
@@ -910,13 +1571,17 @@ function ProductEditor({
         </h3>
 
         <form
-          action={deleteProduct}
+          action={
+            deleteProduct
+          }
           className="form"
         >
           <input
             type="hidden"
             name="product_id"
-            value={product.id}
+            value={
+              product.id
+            }
           />
 
           <input
@@ -933,12 +1598,15 @@ function ProductEditor({
   );
 }
 
-function getItemMissingInfo(item) {
+function getItemMissingInfo(
+  item
+) {
   const missing = [];
 
   if (
     !String(
-      item.supplier_url || ""
+      item.supplier_url ||
+        ""
     ).trim()
   ) {
     missing.push(
@@ -970,25 +1638,29 @@ function getItemMissingInfo(item) {
 
   const productId =
     String(
-      item.supplier_product_id ||
+      item
+        .supplier_product_id ||
         ""
     ).trim();
 
   const variantId =
     String(
-      item.supplier_variant_id ||
+      item
+        .supplier_variant_id ||
         ""
     ).trim();
 
   const sku =
     String(
-      item.supplier_sku || ""
+      item.supplier_sku ||
+        ""
     ).trim();
 
   const hasVariant =
     Boolean(
       String(
-        item.variant_name || ""
+        item.variant_name ||
+          ""
       ).trim()
     );
 
@@ -1042,8 +1714,8 @@ function SupplierPrep({
     items.length > 0 &&
     itemChecks.every(
       (check) =>
-        check.missing.length ===
-        0
+        check.missing
+          .length === 0
     );
 
   const orderReady =
@@ -1055,7 +1727,8 @@ function SupplierPrep({
       (sum, item) => {
         const quantity =
           Number(
-            item.quantity || 1
+            item.quantity ||
+              1
           );
 
         const cost =
@@ -1066,7 +1739,8 @@ function SupplierPrep({
 
         return (
           sum +
-          cost * quantity
+          cost *
+            quantity
         );
       },
       0
@@ -1082,16 +1756,32 @@ function SupplierPrep({
     }`,
     "",
     "CUSTOMER",
-    `${order.customer_name || ""}`,
-    `${order.customer_email || ""}`,
+    `${
+      order.customer_name ||
+      ""
+    }`,
+    `${
+      order.customer_email ||
+      ""
+    }`,
+    `${
+      order.customer_phone ||
+      ""
+    }`,
     "",
     "SHIP TO",
-    `${order.shipping_address || ""}`,
+    `${
+      order.shipping_address ||
+      ""
+    }`,
     "",
     "ITEMS",
 
     ...items.flatMap(
-      (item, index) => {
+      (
+        item,
+        index
+      ) => {
         const missing =
           getItemMissingInfo(
             item
@@ -1109,7 +1799,8 @@ function SupplierPrep({
             : null,
 
           `Quantity: ${
-            item.quantity || 1
+            item.quantity ||
+            1
           }`,
 
           item.supplier
@@ -1142,12 +1833,15 @@ function SupplierPrep({
             ? `Supplier URL: ${item.supplier_url}`
             : null,
 
-          missing.length > 0
+          missing.length >
+          0
             ? `MISSING: ${missing.join(
                 ", "
               )}`
             : "READY",
-        ].filter(Boolean);
+        ].filter(
+          Boolean
+        );
       }
     ),
 
@@ -1160,29 +1854,42 @@ function SupplierPrep({
   return (
     <div
       style={{
-        border: orderReady
-          ? "2px solid #1f7a3d"
-          : "2px solid #b7791f",
+        border:
+          orderReady
+            ? "2px solid #1f7a3d"
+            : "2px solid #b7791f",
 
-        padding: "18px",
-        borderRadius: "10px",
+        padding:
+          "18px",
+
+        borderRadius:
+          "10px",
+
         margin:
           "24px 0",
 
-        background: orderReady
-          ? "#f3faf5"
-          : "#fffaf0",
+        background:
+          orderReady
+            ? "#f3faf5"
+            : "#fffaf0",
       }}
     >
       <div
         style={{
-          display: "flex",
+          display:
+            "flex",
+
           justifyContent:
             "space-between",
-          gap: "12px",
+
+          gap:
+            "12px",
+
           alignItems:
             "center",
-          flexWrap: "wrap",
+
+          flexWrap:
+            "wrap",
         }}
       >
         <h3
@@ -1190,12 +1897,14 @@ function SupplierPrep({
             margin: 0,
           }}
         >
-          Supplier Order Prep
+          Supplier Order
+          Prep
         </h3>
 
         <strong
           style={{
-            fontSize: "14px",
+            fontSize:
+              "14px",
           }}
         >
           {orderReady
@@ -1211,7 +1920,8 @@ function SupplierPrep({
         }}
       >
         <strong>
-          Fulfillment validation
+          Fulfillment
+          validation
         </strong>
       </p>
 
@@ -1227,7 +1937,8 @@ function SupplierPrep({
         </p>
       )}
 
-      {items.length === 0 && (
+      {items.length ===
+        0 && (
         <p>
           ⚠ No order items
           available
@@ -1260,18 +1971,24 @@ function SupplierPrep({
 
           return (
             <div
-              key={index}
+              key={
+                index
+              }
               style={{
                 borderTop:
                   "1px solid #ddd",
+
                 paddingTop:
                   "14px",
+
                 marginTop:
                   "14px",
               }}
             >
               <strong>
-                {index + 1}.{" "}
+                {index +
+                  1}
+                .{" "}
                 {item.product_name ||
                   "Product"}
               </strong>
@@ -1296,8 +2013,8 @@ function SupplierPrep({
 
               <p>
                 <strong>
-                  Expected supplier
-                  total:
+                  Expected
+                  supplier total:
                 </strong>{" "}
                 $
                 {expectedTotal.toFixed(
@@ -1311,19 +2028,24 @@ function SupplierPrep({
                   style={{
                     border:
                       "1px solid #b7ddc1",
+
                     background:
                       "#edf8f0",
+
                     padding:
                       "10px",
+
                     borderRadius:
                       "7px",
+
                     marginBottom:
                       "12px",
                   }}
                 >
                   <strong>
-                    ✓ Item ready for
-                    supplier order
+                    ✓ Item ready
+                    for supplier
+                    order
                   </strong>
                 </div>
               ) : (
@@ -1331,12 +2053,16 @@ function SupplierPrep({
                   style={{
                     border:
                       "1px solid #ecd29b",
+
                     background:
                       "#fff7e6",
+
                     padding:
                       "10px",
+
                     borderRadius:
                       "7px",
+
                     marginBottom:
                       "12px",
                   }}
@@ -1384,7 +2110,8 @@ function SupplierPrep({
 
               <p>
                 <strong>
-                  Supplier cost each:
+                  Supplier cost
+                  each:
                 </strong>{" "}
                 $
                 {Number(
@@ -1404,6 +2131,7 @@ function SupplierPrep({
                   style={{
                     display:
                       "inline-block",
+
                     background:
                       "#eee",
                   }}
@@ -1426,16 +2154,21 @@ function SupplierPrep({
 
       <p>
         <strong>
-          Expected supplier order
-          total
+          Expected supplier
+          order total
         </strong>
       </p>
 
       <p
         style={{
-          fontSize: "24px",
-          fontWeight: "800",
-          marginTop: 0,
+          fontSize:
+            "24px",
+
+          fontWeight:
+            "800",
+
+          marginTop:
+            0,
         }}
       >
         $
@@ -1453,24 +2186,197 @@ function SupplierPrep({
 
       <textarea
         readOnly
-        value={prepText}
+        value={
+          prepText
+        }
         style={{
-          width: "100%",
+          width:
+            "100%",
+
           minHeight:
             "340px",
-          padding: "12px",
+
+          padding:
+            "12px",
+
           fontFamily:
             "monospace",
-          fontSize: "13px",
+
+          fontSize:
+            "13px",
         }}
       />
 
       <p className="muted">
         On iPhone, press and
-        hold inside this box to
-        select and copy the order
-        information.
+        hold inside this box
+        to select and copy the
+        order information.
       </p>
+    </div>
+  );
+}
+
+function DsersOrderExport({
+  order,
+  items,
+}) {
+  const missing =
+    getDsersOrderMissingInfo(
+      order,
+      items
+    );
+
+  const ready =
+    missing.length === 0;
+
+  const csv =
+    ready
+      ? buildDsersOrderCsv(
+          order,
+          items
+        )
+      : "";
+
+  return (
+    <div
+      style={{
+        border:
+          ready
+            ? "2px solid #1f7a3d"
+            : "2px solid #b7791f",
+
+        background:
+          ready
+            ? "#f3faf5"
+            : "#fffaf0",
+
+        padding:
+          "18px",
+
+        borderRadius:
+          "10px",
+
+        margin:
+          "24px 0",
+      }}
+    >
+      <h3
+        style={{
+          marginTop:
+            0,
+        }}
+      >
+        DSers Order Export
+      </h3>
+
+      {ready ? (
+        <>
+          <p>
+            ✓ Customer and
+            product information
+            needed for the DSers
+            order file is present.
+          </p>
+
+          <p>
+            <strong>
+              DSers SKU
+              mapping
+            </strong>
+          </p>
+
+          {items.map(
+            (
+              item,
+              index
+            ) => (
+              <p
+                key={
+                  index
+                }
+              >
+                {item.product_name ||
+                  "Product"}
+                {item.variant_name
+                  ? ` -- ${item.variant_name}`
+                  : ""}
+                <br />
+                <strong>
+                  SKU:
+                </strong>{" "}
+                {makeDsersSkuFromItem(
+                  item
+                )}
+              </p>
+            )
+          )}
+
+          <a
+            href={
+              csvDownloadHref(
+                csv
+              )
+            }
+            download={`southstar-dsers-order-${order.id}.csv`}
+            className="btn"
+            style={{
+              display:
+                "inline-block",
+
+              padding:
+                "13px 18px",
+
+              background:
+                "#1d2a20",
+
+              color:
+                "white",
+
+              textDecoration:
+                "none",
+
+              borderRadius:
+                "7px",
+
+              fontWeight:
+                "700",
+            }}
+          >
+            Download DSers
+            Order CSV
+          </a>
+
+          <p
+            className="muted"
+            style={{
+              marginTop:
+                "14px",
+            }}
+          >
+            Upload this file
+            under DSers → CSV
+            Upload → Orders.
+          </p>
+        </>
+      ) : (
+        <>
+          <p>
+            ⚠ This order cannot
+            be exported to DSers
+            yet.
+          </p>
+
+          <p>
+            <strong>
+              Missing:
+            </strong>{" "}
+            {missing.join(
+              ", "
+            )}
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -1484,7 +2390,8 @@ function OrderManager({
 
   const amount =
     Number(
-      order.amount_total || 0
+      order.amount_total ||
+        0
     ) / 100;
 
   const supplierCost =
@@ -1496,11 +2403,13 @@ function OrderManager({
       : order.supplier_cost;
 
   const items =
-    Array.isArray(order.items)
+    Array.isArray(
+      order.items
+    )
       ? order.items
       : [];
 
-  const orderReady =
+  const supplierReady =
     Boolean(
       String(
         order.shipping_address ||
@@ -1515,23 +2424,41 @@ function OrderManager({
         ).length === 0
     );
 
+  const dsersMissing =
+    getDsersOrderMissingInfo(
+      order,
+      items
+    );
+
+  const dsersReady =
+    dsersMissing.length ===
+    0;
+
+  const orderReady =
+    supplierReady &&
+    dsersReady;
+
   return (
     <details
       className="panel"
       style={{
-        marginTop: "16px",
+        marginTop:
+          "16px",
       }}
     >
       <summary
         style={{
-          cursor: "pointer",
-          fontWeight: "700",
+          cursor:
+            "pointer",
+
+          fontWeight:
+            "700",
         }}
       >
         {order.customer_name ||
           "Customer"}
-        {" -- "}
-        ${amount.toFixed(2)}
+        {" -- "}$
+        {amount.toFixed(2)}
         {" -- "}
         {status}
         {" -- "}
@@ -1542,7 +2469,8 @@ function OrderManager({
 
       <div
         style={{
-          marginTop: "20px",
+          marginTop:
+            "20px",
         }}
       >
         <div
@@ -1557,16 +2485,20 @@ function OrderManager({
                 ? "#edf8f0"
                 : "#fff7e6",
 
-            padding: "12px",
-            borderRadius: "8px",
+            padding:
+              "12px",
+
+            borderRadius:
+              "8px",
+
             marginBottom:
               "20px",
           }}
         >
           <strong>
             {orderReady
-              ? "✓ This order has the required supplier information."
-              : "⚠ This order is not ready for supplier purchasing yet."}
+              ? "✓ This order has the required supplier and DSers information."
+              : "⚠ This order is not completely ready for fulfillment yet."}
           </strong>
         </div>
 
@@ -1585,6 +2517,11 @@ function OrderManager({
         </p>
 
         <p>
+          {order.customer_phone ||
+            "No phone number"}
+        </p>
+
+        <p>
           <strong>
             Shipping address
           </strong>
@@ -1596,15 +2533,68 @@ function OrderManager({
           }
         </p>
 
+        {order.shipping_address_line1 && (
+          <div
+            style={{
+              fontSize:
+                "13px",
+            }}
+          >
+            <p>
+              <strong>
+                Structured
+                address:
+              </strong>
+            </p>
+
+            <p>
+              {
+                order
+                  .shipping_address_line1
+              }
+
+              {order
+                .shipping_address_line2
+                ? `, ${order.shipping_address_line2}`
+                : ""}
+            </p>
+
+            <p>
+              {
+                order.shipping_city
+              }
+              ,{" "}
+              {
+                order.shipping_state
+              }{" "}
+              {
+                order
+                  .shipping_postal_code
+              }
+            </p>
+
+            <p>
+              {fullCountryName(
+                order
+                  .shipping_country
+              )}
+            </p>
+          </div>
+        )}
+
         <hr />
 
         <h3>
           Items
         </h3>
 
-        {items.length > 0 ? (
+        {items.length >
+        0 ? (
           items.map(
-            (item, index) => {
+            (
+              item,
+              index
+            ) => {
               const quantity =
                 Number(
                   item.quantity ||
@@ -1637,14 +2627,19 @@ function OrderManager({
 
               return (
                 <div
-                  key={index}
+                  key={
+                    index
+                  }
                   style={{
                     border:
                       "1px solid #ddd",
+
                     padding:
                       "16px",
+
                     borderRadius:
                       "8px",
+
                     marginBottom:
                       "14px",
                   }}
@@ -1699,7 +2694,8 @@ function OrderManager({
 
                   <p>
                     <strong>
-                      Estimated margin:
+                      Estimated
+                      margin:
                     </strong>{" "}
                     $
                     {margin.toFixed(
@@ -1718,7 +2714,8 @@ function OrderManager({
                   {item.supplier_product_id && (
                     <p>
                       <strong>
-                        Supplier product ID:
+                        Supplier
+                        product ID:
                       </strong>{" "}
                       {
                         item
@@ -1730,7 +2727,8 @@ function OrderManager({
                   {item.supplier_variant_id && (
                     <p>
                       <strong>
-                        Supplier variant ID:
+                        Supplier
+                        variant ID:
                       </strong>{" "}
                       {
                         item
@@ -1742,13 +2740,24 @@ function OrderManager({
                   {item.supplier_sku && (
                     <p>
                       <strong>
-                        Supplier SKU:
+                        Supplier
+                        SKU:
                       </strong>{" "}
                       {
-                        item.supplier_sku
+                        item
+                          .supplier_sku
                       }
                     </p>
                   )}
+
+                  <p>
+                    <strong>
+                      DSers SKU:
+                    </strong>{" "}
+                    {makeDsersSkuFromItem(
+                      item
+                    )}
+                  </p>
 
                   {item.supplier_url && (
                     <p>
@@ -1762,6 +2771,7 @@ function OrderManager({
                         style={{
                           display:
                             "inline-block",
+
                           background:
                             "#eee",
                         }}
@@ -1781,6 +2791,11 @@ function OrderManager({
             available.
           </p>
         )}
+
+        <DsersOrderExport
+          order={order}
+          items={items}
+        />
 
         <SupplierPrep
           order={order}
@@ -1828,24 +2843,34 @@ function OrderManager({
         </h3>
 
         <form
-          action={updateOrder}
+          action={
+            updateOrder
+          }
           className="form"
         >
           <input
             type="hidden"
             name="order_id"
-            value={order.id}
+            value={
+              order.id
+            }
           />
 
           <label>
-            Fulfillment status
+            Fulfillment
+            status
 
             <select
               name="fulfillment_status"
-              defaultValue={status}
+              defaultValue={
+                status
+              }
               style={{
-                width: "100%",
-                padding: "13px",
+                width:
+                  "100%",
+
+                padding:
+                  "13px",
               }}
             >
               <option value="unfulfilled">
@@ -1908,7 +2933,8 @@ function OrderManager({
           <input
             name="carrier"
             defaultValue={
-              order.carrier || ""
+              order.carrier ||
+              ""
             }
             placeholder="Carrier -- e.g. USPS"
           />
@@ -1971,25 +2997,37 @@ export default async function Admin() {
   const [
     { data: products },
     { data: orders },
-  ] = await Promise.all([
-    db
-      .from("products")
-      .select("*")
-      .order("created_at", {
-        ascending: false,
-      }),
+  ] =
+    await Promise.all([
+      db
+        .from("products")
+        .select("*")
+        .order(
+          "created_at",
+          {
+            ascending:
+              false,
+          }
+        ),
 
-    db
-      .from("orders")
-      .select("*")
-      .order("created_at", {
-        ascending: false,
-      }),
-  ]);
+      db
+        .from("orders")
+        .select("*")
+        .order(
+          "created_at",
+          {
+            ascending:
+              false,
+          }
+        ),
+    ]);
 
   const revenue =
     (orders || []).reduce(
-      (sum, order) =>
+      (
+        sum,
+        order
+      ) =>
         sum +
         Number(
           order.amount_total ||
@@ -1997,6 +3035,17 @@ export default async function Admin() {
         ),
       0
     ) / 100;
+
+  const activeProducts =
+    (products || []).filter(
+      (product) =>
+        product.active
+    );
+
+  const dsersProductsCsv =
+    buildDsersProductsCsv(
+      activeProducts
+    );
 
   return (
     <main className="wrap">
@@ -2007,11 +3056,16 @@ export default async function Admin() {
           </p>
 
           <h1>
-            Southstar dashboard
+            Southstar
+            dashboard
           </h1>
         </div>
 
-        <form action={logout}>
+        <form
+          action={
+            logout
+          }
+        >
           <button>
             Sign out
           </button>
@@ -2023,7 +3077,8 @@ export default async function Admin() {
           ORDERS
 
           <b>
-            {orders?.length || 0}
+            {orders?.length ||
+              0}
           </b>
         </div>
 
@@ -2031,7 +3086,10 @@ export default async function Admin() {
           REVENUE
 
           <b>
-            ${revenue.toFixed(2)}
+            $
+            {revenue.toFixed(
+              2
+            )}
           </b>
         </div>
 
@@ -2047,11 +3105,107 @@ export default async function Admin() {
 
       <section className="panel">
         <h2>
+          DSers CSV Bridge
+        </h2>
+
+        <p>
+          Southstar can now
+          prepare the product
+          and order files needed
+          for your DSers CSV
+          sales channel.
+        </p>
+
+        <p>
+          <strong>
+            Step 1:
+          </strong>{" "}
+          Import your Southstar
+          products into DSers
+          and map them to their
+          AliExpress supplier
+          products.
+        </p>
+
+        <p>
+          <strong>
+            Step 2:
+          </strong>{" "}
+          When a customer order
+          is ready, download its
+          DSers Order CSV from
+          the order below and
+          upload it to DSers.
+        </p>
+
+        {activeProducts.length >
+        0 ? (
+          <a
+            href={
+              csvDownloadHref(
+                dsersProductsCsv
+              )
+            }
+            download="southstar-dsers-products.csv"
+            className="btn"
+            style={{
+              display:
+                "inline-block",
+
+              padding:
+                "13px 18px",
+
+              background:
+                "#1d2a20",
+
+              color:
+                "white",
+
+              textDecoration:
+                "none",
+
+              borderRadius:
+                "7px",
+
+              fontWeight:
+                "700",
+            }}
+          >
+            Download DSers
+            Products CSV
+          </a>
+        ) : (
+          <p>
+            No active products
+            are available to
+            export.
+          </p>
+        )}
+
+        <p
+          className="muted"
+          style={{
+            marginTop:
+              "14px",
+          }}
+        >
+          This export contains
+          your active Southstar
+          products and variants.
+          Upload it under DSers
+          → CSV Upload → Product.
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2>
           Add product
         </h2>
 
         <form
-          action={addProduct}
+          action={
+            addProduct
+          }
           className="form"
         >
           <input
@@ -2129,17 +3283,29 @@ export default async function Admin() {
           </h3>
 
           <p className="muted">
-            Leave these blank if
-            the product has no
-            options.
+            Leave these blank
+            if the product has
+            no options.
           </p>
 
-          <VariantRow number={1} />
-          <VariantRow number={2} />
-          <VariantRow number={3} />
-          <VariantRow number={4} />
-          <VariantRow number={5} />
-          <VariantRow number={6} />
+          <VariantRow
+            number={1}
+          />
+          <VariantRow
+            number={2}
+          />
+          <VariantRow
+            number={3}
+          />
+          <VariantRow
+            number={4}
+          />
+          <VariantRow
+            number={5}
+          />
+          <VariantRow
+            number={6}
+          />
 
           <button
             type="submit"
@@ -2158,8 +3324,12 @@ export default async function Admin() {
         {(products || []).map(
           (product) => (
             <ProductEditor
-              key={product.id}
-              product={product}
+              key={
+                product.id
+              }
+              product={
+                product
+              }
             />
           )
         )}
@@ -2167,14 +3337,16 @@ export default async function Admin() {
 
       <section className="panel">
         <h2>
-          Orders & Fulfillment
+          Orders &
+          Fulfillment
         </h2>
 
         <p className="muted">
-          Open an order to manage
+          Open an order to
+          manage DSers export,
           supplier purchasing,
-          shipping, tracking, and
-          delivery.
+          shipping, tracking,
+          and delivery.
         </p>
 
         {(orders || []).length >
@@ -2182,8 +3354,12 @@ export default async function Admin() {
           (orders || []).map(
             (order) => (
               <OrderManager
-                key={order.id}
-                order={order}
+                key={
+                  order.id
+                }
+                order={
+                  order
+                }
               />
             )
           )
