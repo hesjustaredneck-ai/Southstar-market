@@ -3140,13 +3140,8 @@ export default async function Admin() {
 
         {activeProducts.length >
         0 ? (
-          <a
-            href={
-              csvDownloadHref(
-                dsersProductsCsv
-              )
-            }
-            download="southstar-dsers-products.csv"
+<a
+  href="/api/dsers-products"
             className="btn"
             style={{
               display:
