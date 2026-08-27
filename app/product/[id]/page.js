@@ -25,6 +25,11 @@ export default async function ProductPage({ params }) {
       ? [product.image_url]
       : [];
 
+  const variants =
+    Array.isArray(product.variants)
+      ? product.variants
+      : [];
+
   return (
     <main className="wrap">
       <section className="panel productPage">
@@ -59,14 +64,30 @@ export default async function ProductPage({ params }) {
           <h1>{product.name}</h1>
 
           <p className="productPrice">
-            ${Number(product.price || 0).toFixed(2)}
+            {variants.length > 0
+              ? `From $${Math.min(
+                  ...variants.map((variant) =>
+                    Number(
+                      variant.price ??
+                        product.price ??
+                        0
+                    )
+                  )
+                ).toFixed(2)}`
+              : `$${Number(
+                  product.price || 0
+                ).toFixed(2)}`}
           </p>
 
           <p className="productDescription">
             {product.description}
           </p>
 
-          <BuyNowButton productId={product.id} />
+          <BuyNowButton
+            productId={product.id}
+            variants={variants}
+            basePrice={Number(product.price || 0)}
+          />
 
           <div className="productTrust">
             <p>Secure checkout</p>
