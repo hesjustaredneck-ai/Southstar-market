@@ -70,7 +70,10 @@ async function uploadImages(db, files) {
   const imageUrls = [];
 
   for (const file of files) {
-    if (!(file instanceof File) || file.size <= 0) {
+    if (
+      !(file instanceof File) ||
+      file.size <= 0
+    ) {
       continue;
     }
 
@@ -228,7 +231,9 @@ async function updateProduct(fd) {
     String(fd.get("product_id") || "");
 
   if (!productId) {
-    throw new Error("Missing product ID");
+    throw new Error(
+      "Missing product ID"
+    );
   }
 
   const {
@@ -240,8 +245,13 @@ async function updateProduct(fd) {
     .eq("id", productId)
     .maybeSingle();
 
-  if (existingError || !existing) {
-    throw new Error("Product not found");
+  if (
+    existingError ||
+    !existing
+  ) {
+    throw new Error(
+      "Product not found"
+    );
   }
 
   const files = fd
@@ -253,7 +263,9 @@ async function updateProduct(fd) {
     );
 
   let imageUrls =
-    Array.isArray(existing.image_urls)
+    Array.isArray(
+      existing.image_urls
+    )
       ? existing.image_urls
       : [];
 
@@ -262,7 +274,10 @@ async function updateProduct(fd) {
 
   if (files.length > 0) {
     imageUrls =
-      await uploadImages(db, files);
+      await uploadImages(
+        db,
+        files
+      );
 
     mainImage =
       imageUrls[0] || "";
@@ -357,14 +372,18 @@ async function toggleProduct(fd) {
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const productId =
-    String(fd.get("product_id") || "");
+    String(
+      fd.get("product_id") || ""
+    );
 
   const currentActive =
-    String(fd.get("current_active"))
-      .toLowerCase() === "true";
+    String(
+      fd.get("current_active")
+    ).toLowerCase() === "true";
 
   const { error } = await db
     .from("products")
@@ -387,19 +406,27 @@ async function deleteProduct(fd) {
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const productId =
-    String(fd.get("product_id") || "");
+    String(
+      fd.get("product_id") || ""
+    );
 
   const confirmation =
     String(
-      fd.get("delete_confirmation") || ""
+      fd.get(
+        "delete_confirmation"
+      ) || ""
     )
       .trim()
       .toUpperCase();
 
-  if (confirmation !== "DELETE") {
+  if (
+    confirmation !==
+    "DELETE"
+  ) {
     throw new Error(
       "Type DELETE exactly to confirm."
     );
@@ -424,13 +451,18 @@ async function updateOrder(fd) {
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const orderId =
-    String(fd.get("order_id") || "");
+    String(
+      fd.get("order_id") || ""
+    );
 
   if (!orderId) {
-    throw new Error("Missing order ID");
+    throw new Error(
+      "Missing order ID"
+    );
   }
 
   const {
@@ -442,35 +474,48 @@ async function updateOrder(fd) {
     .eq("id", orderId)
     .maybeSingle();
 
-  if (orderError || !existingOrder) {
-    throw new Error("Order not found");
+  if (
+    orderError ||
+    !existingOrder
+  ) {
+    throw new Error(
+      "Order not found"
+    );
   }
 
   const fulfillmentStatus =
     String(
-      fd.get("fulfillment_status") ||
-        "unfulfilled"
+      fd.get(
+        "fulfillment_status"
+      ) || "unfulfilled"
     );
 
   const supplierCostValue =
     String(
-      fd.get("supplier_cost") || ""
+      fd.get("supplier_cost") ||
+        ""
     ).trim();
 
   const supplierCost =
     supplierCostValue === ""
       ? null
-      : Number(supplierCostValue);
+      : Number(
+          supplierCostValue
+        );
 
   const saleAmount =
     Number(
-      existingOrder.amount_total || 0
+      existingOrder.amount_total ||
+        0
     ) / 100;
 
   const estimatedProfit =
     supplierCost !== null &&
-    Number.isFinite(supplierCost)
-      ? saleAmount - supplierCost
+    Number.isFinite(
+      supplierCost
+    )
+      ? saleAmount -
+        supplierCost
       : null;
 
   const updates = {
@@ -479,7 +524,9 @@ async function updateOrder(fd) {
 
     tracking_number:
       String(
-        fd.get("tracking_number") || ""
+        fd.get(
+          "tracking_number"
+        ) || ""
       ).trim(),
 
     carrier:
@@ -489,7 +536,9 @@ async function updateOrder(fd) {
 
     supplier_order_id:
       String(
-        fd.get("supplier_order_id") || ""
+        fd.get(
+          "supplier_order_id"
+        ) || ""
       ).trim(),
 
     supplier_order_status:
@@ -507,7 +556,8 @@ async function updateOrder(fd) {
   };
 
   if (
-    fulfillmentStatus === "shipped" &&
+    fulfillmentStatus ===
+      "shipped" &&
     !existingOrder.fulfilled_at
   ) {
     updates.fulfilled_at =
@@ -515,7 +565,8 @@ async function updateOrder(fd) {
   }
 
   if (
-    fulfillmentStatus === "delivered" &&
+    fulfillmentStatus ===
+      "delivered" &&
     !existingOrder.delivered_at
   ) {
     updates.delivered_at =
@@ -523,7 +574,8 @@ async function updateOrder(fd) {
   }
 
   if (
-    fulfillmentStatus === "refunded" &&
+    fulfillmentStatus ===
+      "refunded" &&
     !existingOrder.refunded_at
   ) {
     updates.refunded_at =
@@ -547,7 +599,8 @@ async function updateOrder(fd) {
 async function logout() {
   "use server";
 
-  const s = await createClient();
+  const s =
+    await createClient();
 
   await s.auth.signOut();
 
@@ -561,7 +614,8 @@ function VariantRow({
   return (
     <div
       style={{
-        border: "1px solid #ddd",
+        border:
+          "1px solid #ddd",
         padding: "14px",
         borderRadius: "7px",
         display: "grid",
@@ -603,7 +657,8 @@ function VariantRow({
       <input
         name="variant_id"
         defaultValue={
-          variant?.supplier_variant_id ||
+          variant
+            ?.supplier_variant_id ||
           ""
         }
         placeholder="AliExpress variant ID"
@@ -612,7 +667,9 @@ function VariantRow({
       <input
         name="variant_sku"
         defaultValue={
-          variant?.supplier_sku || ""
+          variant
+            ?.supplier_sku ||
+          ""
         }
         placeholder="Supplier SKU"
       />
@@ -620,9 +677,13 @@ function VariantRow({
   );
 }
 
-function ProductEditor({ product }) {
+function ProductEditor({
+  product,
+}) {
   const variants =
-    Array.isArray(product.variants)
+    Array.isArray(
+      product.variants
+    )
       ? product.variants
       : [];
 
@@ -678,7 +739,8 @@ function ProductEditor({ product }) {
           <textarea
             name="description"
             defaultValue={
-              product.description || ""
+              product.description ||
+              ""
             }
             placeholder="Description"
           />
@@ -686,7 +748,8 @@ function ProductEditor({ product }) {
           <input
             name="category"
             defaultValue={
-              product.category || ""
+              product.category ||
+              ""
             }
             placeholder="Category"
           />
@@ -702,8 +765,9 @@ function ProductEditor({ product }) {
           </label>
 
           <p className="muted">
-            Leave images blank to keep
-            the current gallery.
+            Leave images blank
+            to keep the current
+            gallery.
           </p>
 
           <input
@@ -739,7 +803,8 @@ function ProductEditor({ product }) {
           <input
             name="supplier_url"
             defaultValue={
-              product.supplier_url || ""
+              product.supplier_url ||
+              ""
             }
             placeholder="AliExpress product URL"
           />
@@ -747,7 +812,8 @@ function ProductEditor({ product }) {
           <input
             name="supplier_product_id"
             defaultValue={
-              product.supplier_product_id ||
+              product
+                .supplier_product_id ||
               ""
             }
             placeholder="AliExpress product ID"
@@ -756,7 +822,8 @@ function ProductEditor({ product }) {
           <input
             name="supplier_variant_id"
             defaultValue={
-              product.supplier_variant_id ||
+              product
+                .supplier_variant_id ||
               ""
             }
             placeholder="Default AliExpress variant ID"
@@ -765,7 +832,8 @@ function ProductEditor({ product }) {
           <input
             name="supplier_sku"
             defaultValue={
-              product.supplier_sku || ""
+              product.supplier_sku ||
+              ""
             }
             placeholder="Default supplier SKU"
           />
@@ -780,7 +848,9 @@ function ProductEditor({ product }) {
             (index) => (
               <VariantRow
                 key={index}
-                number={index + 1}
+                number={
+                  index + 1
+                }
                 variant={
                   variants[index] ||
                   null
@@ -799,11 +869,14 @@ function ProductEditor({ product }) {
 
         <hr
           style={{
-            margin: "28px 0",
+            margin:
+              "28px 0",
           }}
         />
 
-        <form action={toggleProduct}>
+        <form
+          action={toggleProduct}
+        >
           <input
             type="hidden"
             name="product_id"
@@ -829,7 +902,8 @@ function ProductEditor({ product }) {
 
         <hr
           style={{
-            margin: "28px 0",
+            margin:
+              "28px 0",
           }}
         />
 
@@ -861,18 +935,272 @@ function ProductEditor({ product }) {
   );
 }
 
-function OrderManager({ order }) {
+function SupplierPrep({
+  order,
+  items,
+}) {
+  const hasAddress =
+    Boolean(
+      order.shipping_address
+    );
+
+  const readyItems =
+    items.filter(
+      (item) =>
+        Boolean(
+          item.supplier_url
+        )
+    );
+
+  const allItemsReady =
+    items.length > 0 &&
+    readyItems.length ===
+      items.length &&
+    hasAddress;
+
+  const prepText = [
+    `SOUTHSTAR SUPPLIER ORDER`,
+    ``,
+    `CUSTOMER`,
+    `${order.customer_name || ""}`,
+    `${order.customer_email || ""}`,
+    ``,
+    `SHIP TO`,
+    `${order.shipping_address || ""}`,
+    ``,
+    `ITEMS`,
+    ...items.flatMap(
+      (item, index) => [
+        ``,
+        `${index + 1}. ${
+          item.product_name ||
+          "Product"
+        }`,
+        item.variant_name
+          ? `Variant: ${item.variant_name}`
+          : null,
+        `Quantity: ${
+          item.quantity || 1
+        }`,
+        item.supplier
+          ? `Supplier: ${item.supplier}`
+          : null,
+        item.supplier_product_id
+          ? `Product ID: ${item.supplier_product_id}`
+          : null,
+        item.supplier_variant_id
+          ? `Variant ID: ${item.supplier_variant_id}`
+          : null,
+        item.supplier_sku
+          ? `SKU: ${item.supplier_sku}`
+          : null,
+        item.supplier_cost !==
+          undefined &&
+        item.supplier_cost !==
+          null
+          ? `Supplier cost each: $${Number(
+              item.supplier_cost ||
+                0
+            ).toFixed(2)}`
+          : null,
+        item.supplier_url
+          ? `Supplier URL: ${item.supplier_url}`
+          : null,
+      ].filter(Boolean)
+    ),
+  ].join("\n");
+
+  return (
+    <div
+      style={{
+        border:
+          "2px solid #ddd",
+        padding: "18px",
+        borderRadius: "10px",
+        margin:
+          "24px 0",
+        background:
+          "#faf9f5",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent:
+            "space-between",
+          gap: "12px",
+          alignItems:
+            "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <h3
+          style={{
+            margin: 0,
+          }}
+        >
+          Supplier Order Prep
+        </h3>
+
+        <strong>
+          {allItemsReady
+            ? "✓ Ready for manual order"
+            : "⚠ Missing supplier info"}
+        </strong>
+      </div>
+
+      {!hasAddress && (
+        <p>
+          ⚠ Customer shipping
+          address is missing.
+        </p>
+      )}
+
+      {items.map(
+        (item, index) => {
+          const missing = [];
+
+          if (
+            !item.supplier_url
+          ) {
+            missing.push(
+              "supplier URL"
+            );
+          }
+
+          if (
+            item.variant_name &&
+            !item
+              .supplier_variant_id &&
+            !item.supplier_sku
+          ) {
+            missing.push(
+              "variant ID/SKU"
+            );
+          }
+
+          return (
+            <div
+              key={index}
+              style={{
+                borderTop:
+                  "1px solid #ddd",
+                paddingTop:
+                  "14px",
+                marginTop:
+                  "14px",
+              }}
+            >
+              <strong>
+                {item.product_name ||
+                  "Product"}
+              </strong>
+
+              {item.variant_name && (
+                <p>
+                  Variant:{" "}
+                  {
+                    item.variant_name
+                  }
+                </p>
+              )}
+
+              <p>
+                Quantity:{" "}
+                {item.quantity ||
+                  1}
+              </p>
+
+              {missing.length >
+                0 ? (
+                <p>
+                  ⚠ Missing:{" "}
+                  {missing.join(
+                    ", "
+                  )}
+                </p>
+              ) : (
+                <p>
+                  ✓ Supplier mapping
+                  present
+                </p>
+              )}
+
+              {item.supplier_url && (
+                <a
+                  href={
+                    item.supplier_url
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn"
+                  style={{
+                    display:
+                      "inline-block",
+                    background:
+                      "#eee",
+                  }}
+                >
+                  Open supplier
+                  product →
+                </a>
+              )}
+            </div>
+          );
+        }
+      )}
+
+      <hr />
+
+      <p>
+        <strong>
+          Copy-friendly order
+          details
+        </strong>
+      </p>
+
+      <textarea
+        readOnly
+        value={prepText}
+        style={{
+          width: "100%",
+          minHeight:
+            "300px",
+          padding: "12px",
+          fontFamily:
+            "monospace",
+          fontSize: "13px",
+        }}
+      />
+
+      <p className="muted">
+        On iPhone, press and
+        hold inside this box to
+        select/copy the order
+        information when placing
+        the supplier order.
+      </p>
+    </div>
+  );
+}
+
+function OrderManager({
+  order,
+}) {
   const status =
     order.fulfillment_status ||
     "unfulfilled";
 
   const amount =
-    Number(order.amount_total || 0) /
-    100;
+    Number(
+      order.amount_total || 0
+    ) / 100;
 
   const supplierCost =
-    order.supplier_cost === null ||
-    order.supplier_cost === undefined
+    order.supplier_cost ===
+      null ||
+    order.supplier_cost ===
+      undefined
       ? ""
       : order.supplier_cost;
 
@@ -928,7 +1256,9 @@ function OrderManager({ order }) {
         </p>
 
         <p>
-          {order.shipping_address}
+          {
+            order.shipping_address
+          }
         </p>
 
         <hr />
@@ -938,174 +1268,189 @@ function OrderManager({ order }) {
         </h3>
 
         {items.length > 0 ? (
-          items.map((item, index) => {
-            const quantity =
-              Number(
-                item.quantity || 1
-              );
+          items.map(
+            (item, index) => {
+              const quantity =
+                Number(
+                  item.quantity ||
+                    1
+                );
 
-            const unitPrice =
-              Number(
-                item.unit_price || 0
-              );
+              const unitPrice =
+                Number(
+                  item.unit_price ||
+                    0
+                );
 
-            const itemSupplierCost =
-              Number(
-                item.supplier_cost || 0
-              );
+              const itemSupplierCost =
+                Number(
+                  item.supplier_cost ||
+                    0
+                );
 
-            const saleTotal =
-              unitPrice * quantity;
+              const saleTotal =
+                unitPrice *
+                quantity;
 
-            const supplierTotal =
-              itemSupplierCost *
-              quantity;
+              const supplierTotal =
+                itemSupplierCost *
+                quantity;
 
-            const margin =
-              saleTotal -
-              supplierTotal;
+              const margin =
+                saleTotal -
+                supplierTotal;
 
-            return (
-              <div
-                key={index}
-                style={{
-                  border:
-                    "1px solid #ddd",
-                  padding:
-                    "16px",
-                  borderRadius:
-                    "8px",
-                  marginBottom:
-                    "14px",
-                }}
-              >
-                <h4
+              return (
+                <div
+                  key={index}
                   style={{
-                    marginTop:
-                      0,
+                    border:
+                      "1px solid #ddd",
+                    padding:
+                      "16px",
+                    borderRadius:
+                      "8px",
+                    marginBottom:
+                      "14px",
                   }}
                 >
-                  {item.product_name ||
-                    "Product"}
-                </h4>
+                  <h4
+                    style={{
+                      marginTop:
+                        0,
+                    }}
+                  >
+                    {item.product_name ||
+                      "Product"}
+                  </h4>
 
-                {item.variant_name && (
-                  <p>
-                    <strong>
-                      Variant:
-                    </strong>{" "}
-                    {
-                      item.variant_name
-                    }
-                  </p>
-                )}
-
-                <p>
-                  <strong>
-                    Quantity:
-                  </strong>{" "}
-                  {quantity}
-                </p>
-
-                <p>
-                  <strong>
-                    Sale price:
-                  </strong>{" "}
-                  $
-                  {unitPrice.toFixed(
-                    2
-                  )}
-                </p>
-
-                <p>
-                  <strong>
-                    Supplier cost:
-                  </strong>{" "}
-                  $
-                  {itemSupplierCost.toFixed(
-                    2
-                  )}
-                </p>
-
-                <p>
-                  <strong>
-                    Estimated margin:
-                  </strong>{" "}
-                  $
-                  {margin.toFixed(
-                    2
-                  )}
-                </p>
-
-                <p>
-                  <strong>
-                    Supplier:
-                  </strong>{" "}
-                  {item.supplier ||
-                    "Not set"}
-                </p>
-
-                {item.supplier_product_id && (
-                  <p>
-                    <strong>
-                      Supplier product ID:
-                    </strong>{" "}
-                    {
-                      item.supplier_product_id
-                    }
-                  </p>
-                )}
-
-                {item.supplier_variant_id && (
-                  <p>
-                    <strong>
-                      Supplier variant ID:
-                    </strong>{" "}
-                    {
-                      item.supplier_variant_id
-                    }
-                  </p>
-                )}
-
-                {item.supplier_sku && (
-                  <p>
-                    <strong>
-                      Supplier SKU:
-                    </strong>{" "}
-                    {
-                      item.supplier_sku
-                    }
-                  </p>
-                )}
-
-                {item.supplier_url && (
-                  <p>
-                    <a
-                      href={
-                        item.supplier_url
+                  {item.variant_name && (
+                    <p>
+                      <strong>
+                        Variant:
+                      </strong>{" "}
+                      {
+                        item.variant_name
                       }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn"
-                      style={{
-                        display:
-                          "inline-block",
-                        background:
-                          "#eee",
-                      }}
-                    >
-                      Open supplier product →
-                    </a>
+                    </p>
+                  )}
+
+                  <p>
+                    <strong>
+                      Quantity:
+                    </strong>{" "}
+                    {quantity}
                   </p>
-                )}
-              </div>
-            );
-          })
+
+                  <p>
+                    <strong>
+                      Sale price:
+                    </strong>{" "}
+                    $
+                    {unitPrice.toFixed(
+                      2
+                    )}
+                  </p>
+
+                  <p>
+                    <strong>
+                      Supplier cost:
+                    </strong>{" "}
+                    $
+                    {itemSupplierCost.toFixed(
+                      2
+                    )}
+                  </p>
+
+                  <p>
+                    <strong>
+                      Estimated margin:
+                    </strong>{" "}
+                    $
+                    {margin.toFixed(
+                      2
+                    )}
+                  </p>
+
+                  <p>
+                    <strong>
+                      Supplier:
+                    </strong>{" "}
+                    {item.supplier ||
+                      "Not set"}
+                  </p>
+
+                  {item.supplier_product_id && (
+                    <p>
+                      <strong>
+                        Supplier product ID:
+                      </strong>{" "}
+                      {
+                        item
+                          .supplier_product_id
+                      }
+                    </p>
+                  )}
+
+                  {item.supplier_variant_id && (
+                    <p>
+                      <strong>
+                        Supplier variant ID:
+                      </strong>{" "}
+                      {
+                        item
+                          .supplier_variant_id
+                      }
+                    </p>
+                  )}
+
+                  {item.supplier_sku && (
+                    <p>
+                      <strong>
+                        Supplier SKU:
+                      </strong>{" "}
+                      {
+                        item.supplier_sku
+                      }
+                    </p>
+                  )}
+
+                  {item.supplier_url && (
+                    <p>
+                      <a
+                        href={
+                          item.supplier_url
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn"
+                        style={{
+                          display:
+                            "inline-block",
+                          background:
+                            "#eee",
+                        }}
+                      >
+                        Open supplier
+                        product →
+                      </a>
+                    </p>
+                  )}
+                </div>
+              );
+            }
+          )
         ) : (
           <p>
-            No item details available.
+            No item details
+            available.
           </p>
         )}
+
+        <SupplierPrep
+          order={order}
+          items={items}
+        />
 
         <hr />
 
@@ -1131,10 +1476,12 @@ function OrderManager({ order }) {
             undefined && (
             <p>
               <strong>
-                Order estimated profit:
-                {" $"}
+                Order estimated
+                profit:{" "}
+                $
                 {Number(
-                  order.estimated_profit
+                  order
+                    .estimated_profit
                 ).toFixed(2)}
               </strong>
             </p>
@@ -1158,14 +1505,13 @@ function OrderManager({ order }) {
 
           <label>
             Fulfillment status
+
             <select
               name="fulfillment_status"
               defaultValue={status}
               style={{
-                width:
-                  "100%",
-                padding:
-                  "13px",
+                width: "100%",
+                padding: "13px",
               }}
             >
               <option value="unfulfilled">
@@ -1177,7 +1523,8 @@ function OrderManager({ order }) {
               </option>
 
               <option value="ordered_from_supplier">
-                Ordered from supplier
+                Ordered from
+                supplier
               </option>
 
               <option value="shipped">
@@ -1197,7 +1544,8 @@ function OrderManager({ order }) {
           <input
             name="supplier_order_id"
             defaultValue={
-              order.supplier_order_id ||
+              order
+                .supplier_order_id ||
               ""
             }
             placeholder="Supplier order ID"
@@ -1206,7 +1554,8 @@ function OrderManager({ order }) {
           <input
             name="supplier_order_status"
             defaultValue={
-              order.supplier_order_status ||
+              order
+                .supplier_order_status ||
               ""
             }
             placeholder="Supplier order status"
@@ -1233,7 +1582,8 @@ function OrderManager({ order }) {
           <input
             name="tracking_number"
             defaultValue={
-              order.tracking_number ||
+              order
+                .tracking_number ||
               ""
             }
             placeholder="Tracking number"
@@ -1281,7 +1631,8 @@ function OrderManager({ order }) {
 export default async function Admin() {
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
   const [
     { data: products },
@@ -1307,7 +1658,8 @@ export default async function Admin() {
       (sum, order) =>
         sum +
         Number(
-          order.amount_total || 0
+          order.amount_total ||
+            0
         ),
       0
     ) / 100;
@@ -1350,7 +1702,8 @@ export default async function Admin() {
         <div>
           PRODUCTS
           <b>
-            {products?.length || 0}
+            {products?.length ||
+              0}
           </b>
         </div>
       </div>
@@ -1382,6 +1735,7 @@ export default async function Admin() {
 
           <label>
             Product images
+
             <input
               name="images"
               type="file"
@@ -1438,8 +1792,9 @@ export default async function Admin() {
           </h3>
 
           <p className="muted">
-            Leave these blank if the
-            product has no options.
+            Leave these blank if
+            the product has no
+            options.
           </p>
 
           <VariantRow number={1} />
@@ -1480,11 +1835,13 @@ export default async function Admin() {
 
         <p className="muted">
           Open an order to manage
-          supplier purchasing, shipping,
-          tracking, and delivery.
+          supplier purchasing,
+          shipping, tracking, and
+          delivery.
         </p>
 
-        {(orders || []).length > 0 ? (
+        {(orders || []).length >
+        0 ? (
           (orders || []).map(
             (order) => (
               <OrderManager
