@@ -1,3 +1,4 @@
+import BuyNowButton from "../../../components/BuyNowButton";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "../../../lib/supabase/admin";
 
@@ -17,7 +18,8 @@ export default async function ProductPage({ params }) {
   }
 
   const images =
-    Array.isArray(product.image_urls) && product.image_urls.length > 0
+    Array.isArray(product.image_urls) &&
+    product.image_urls.length > 0
       ? product.image_urls
       : product.image_url
       ? [product.image_url]
@@ -64,17 +66,7 @@ export default async function ProductPage({ params }) {
             {product.description}
           </p>
 
-          <form action="/api/checkout" method="POST">
-            <input
-              type="hidden"
-              name="product_id"
-              value={product.id}
-            />
-
-            <button type="submit">
-              Buy now
-            </button>
-          </form>
+          <BuyNowButton productId={product.id} />
 
           <div className="productTrust">
             <p>Secure checkout</p>
