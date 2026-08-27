@@ -179,6 +179,13 @@ export async function POST(req) {
       saleAmount -
       totalSupplierCost;
 
+    const customerPhone =
+      session
+        .customer_details
+        ?.phone ||
+      shipping?.phone ||
+      "";
+
     const {
       error: orderError,
     } = await db
@@ -206,6 +213,9 @@ export async function POST(req) {
               ?.name ||
             "",
 
+          customer_phone:
+            customerPhone,
+
           shipping_address:
             address
               ? [
@@ -221,6 +231,31 @@ export async function POST(req) {
                   )
                   .join(", ")
               : "",
+
+          shipping_address_line1:
+            address?.line1 ||
+            "",
+
+          shipping_address_line2:
+            address?.line2 ||
+            "",
+
+          shipping_city:
+            address?.city ||
+            "",
+
+          shipping_state:
+            address?.state ||
+            "",
+
+          shipping_postal_code:
+            address
+              ?.postal_code ||
+            "",
+
+          shipping_country:
+            address?.country ||
+            "",
 
           items,
 
