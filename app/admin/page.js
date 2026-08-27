@@ -876,6 +876,11 @@ function OrderManager({ order }) {
       ? ""
       : order.supplier_cost;
 
+  const items =
+    Array.isArray(order.items)
+      ? order.items
+      : [];
+
   return (
     <details
       className="panel"
@@ -926,23 +931,183 @@ function OrderManager({ order }) {
           {order.shipping_address}
         </p>
 
-        <p>
-          <strong>
-            Items
-          </strong>
-        </p>
+        <hr />
 
-        <pre
-          style={{
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {JSON.stringify(
-            order.items,
-            null,
-            2
-          )}
-        </pre>
+        <h3>
+          Items
+        </h3>
+
+        {items.length > 0 ? (
+          items.map((item, index) => {
+            const quantity =
+              Number(
+                item.quantity || 1
+              );
+
+            const unitPrice =
+              Number(
+                item.unit_price || 0
+              );
+
+            const itemSupplierCost =
+              Number(
+                item.supplier_cost || 0
+              );
+
+            const saleTotal =
+              unitPrice * quantity;
+
+            const supplierTotal =
+              itemSupplierCost *
+              quantity;
+
+            const margin =
+              saleTotal -
+              supplierTotal;
+
+            return (
+              <div
+                key={index}
+                style={{
+                  border:
+                    "1px solid #ddd",
+                  padding:
+                    "16px",
+                  borderRadius:
+                    "8px",
+                  marginBottom:
+                    "14px",
+                }}
+              >
+                <h4
+                  style={{
+                    marginTop:
+                      0,
+                  }}
+                >
+                  {item.product_name ||
+                    "Product"}
+                </h4>
+
+                {item.variant_name && (
+                  <p>
+                    <strong>
+                      Variant:
+                    </strong>{" "}
+                    {
+                      item.variant_name
+                    }
+                  </p>
+                )}
+
+                <p>
+                  <strong>
+                    Quantity:
+                  </strong>{" "}
+                  {quantity}
+                </p>
+
+                <p>
+                  <strong>
+                    Sale price:
+                  </strong>{" "}
+                  $
+                  {unitPrice.toFixed(
+                    2
+                  )}
+                </p>
+
+                <p>
+                  <strong>
+                    Supplier cost:
+                  </strong>{" "}
+                  $
+                  {itemSupplierCost.toFixed(
+                    2
+                  )}
+                </p>
+
+                <p>
+                  <strong>
+                    Estimated margin:
+                  </strong>{" "}
+                  $
+                  {margin.toFixed(
+                    2
+                  )}
+                </p>
+
+                <p>
+                  <strong>
+                    Supplier:
+                  </strong>{" "}
+                  {item.supplier ||
+                    "Not set"}
+                </p>
+
+                {item.supplier_product_id && (
+                  <p>
+                    <strong>
+                      Supplier product ID:
+                    </strong>{" "}
+                    {
+                      item.supplier_product_id
+                    }
+                  </p>
+                )}
+
+                {item.supplier_variant_id && (
+                  <p>
+                    <strong>
+                      Supplier variant ID:
+                    </strong>{" "}
+                    {
+                      item.supplier_variant_id
+                    }
+                  </p>
+                )}
+
+                {item.supplier_sku && (
+                  <p>
+                    <strong>
+                      Supplier SKU:
+                    </strong>{" "}
+                    {
+                      item.supplier_sku
+                    }
+                  </p>
+                )}
+
+                {item.supplier_url && (
+                  <p>
+                    <a
+                      href={
+                        item.supplier_url
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn"
+                      style={{
+                        display:
+                          "inline-block",
+                        background:
+                          "#eee",
+                      }}
+                    >
+                      Open supplier product →
+                    </a>
+                  </p>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <p>
+            No item details available.
+          </p>
+        )}
+
+        <hr />
 
         <p>
           <strong>
@@ -959,6 +1124,21 @@ function OrderManager({ order }) {
           Sale amount: $
           {amount.toFixed(2)}
         </p>
+
+        {order.estimated_profit !==
+          null &&
+          order.estimated_profit !==
+            undefined && (
+            <p>
+              <strong>
+                Order estimated profit:
+                {" $"}
+                {Number(
+                  order.estimated_profit
+                ).toFixed(2)}
+              </strong>
+            </p>
+          )}
 
         <hr />
 
@@ -982,8 +1162,10 @@ function OrderManager({ order }) {
               name="fulfillment_status"
               defaultValue={status}
               style={{
-                width: "100%",
-                padding: "13px",
+                width:
+                  "100%",
+                padding:
+                  "13px",
               }}
             >
               <option value="unfulfilled">
@@ -1064,21 +1246,6 @@ function OrderManager({ order }) {
             Save order
           </button>
         </form>
-
-        {order.estimated_profit !==
-          null &&
-          order.estimated_profit !==
-            undefined && (
-            <p>
-              <strong>
-                Estimated profit:
-                {" $"}
-                {Number(
-                  order.estimated_profit
-                ).toFixed(2)}
-              </strong>
-            </p>
-          )}
 
         {order.fulfilled_at && (
           <p className="muted">
