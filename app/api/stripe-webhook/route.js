@@ -3,74 +3,258 @@ import { headers } from "next/headers";
 import { createAdminClient } from "../../../lib/supabase/admin";
 
 export async function POST(req) {
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const stripe = new Stripe(
+    process.env.STRIPE_SECRET_KEY
+  );
 
-  const body = await req.text();
-  const h = await headers();
+  const body =
+    await req.text();
+
+  const h =
+    await headers();
 
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      h.get("stripe-signature"),
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (e) {
-    return new Response(`Webhook error: ${e.message}`, {
-      status: 400,
-    });
-  }
-
-  if (event.type === "checkout.session.completed") {
-    const s = event.data.object;
-    const db = createAdminClient();
-
-    const li = await stripe.checkout.sessions.listLineItems(s.id, {
-      limit: 100,
-    });
-
-    // Newer Stripe API versions store shipping details here.
-    // The fallback keeps compatibility with older sessions too.
-    const shipping =
-      s.collected_information?.shipping_details ??
-      s.shipping_details;
-
-    const a = shipping?.address;
-
-    await db.from("orders").upsert(
+    event =
+      stripe.webhooks.constructEvent(
+        body,
+        h.get(
+          "stripe-signature"
+        ),
+        process.env
+          .STRIPE_WEBHOOK_SECRET
+      );
+  } catch (error) {
+    return new Response(
+      `Webhook error: ${error.message}`,
       {
-        stripe_session_id: s.id,
-        amount_total: s.amount_total,
-        payment_status: s.payment_status,
-        customer_email: s.customer_details?.email || "",
-        customer_name:
-          shipping?.name ||
-          s.customer_details?.name ||
-          "",
-        shipping_address: a
-          ? [
-              a.line1,
-              a.line2,
-              a.city,
-              a.state,
-              a.postal_code,
-              a.country,
-            ]
-              .filter(Boolean)
-              .join(", ")
-          : "",
-        items: li.data.map((x) => ({
-          description: x.description,
-          quantity: x.quantity,
-          amount_total: x.amount_total,
-        })),
-      },
-      {
-        onConflict: "stripe_session_id",
+        status: 400,
       }
     );
   }
 
-  return Response.json({ received: true });
+  if (
+    event.type ===
+    "checkout.session.completed"
+  ) {
+    const session =
+      event.data.object;
+
+    const db =
+      createAdminClient();
+
+    const lineItems =
+      await stripe.checkout.sessions
+        .listLineItems(
+          session.id,
+          {
+            limit: 100,
+
+            expand: [
+              "data.price.product",
+            ],
+          }
+        );
+
+    const shipping =
+      session
+        .collected_information
+        ?.shipping_details ??
+      session.shipping_details;
+
+    const address =
+      shipping?.address;
+
+    const items =
+      lineItems.data.map(
+        (lineItem) => {
+          const stripeProduct =
+            lineItem.price
+              ?.product;
+
+          const metadata =
+            stripeProduct &&
+            typeof stripeProduct ===
+              "object"
+              ? stripeProduct.metadata ||
+                {}
+              : {};
+
+          const quantity =
+            Number(
+              lineItem.quantity ||
+                1
+            );
+
+          const amountTotal =
+            Number(
+              lineItem.amount_total ||
+                0
+            );
+
+          const unitPrice =
+            quantity > 0
+              ? amountTotal /
+                quantity /
+                100
+              : 0;
+
+          return {
+            product_id:
+              metadata.product_id ||
+              "",
+
+            product_name:
+              metadata.product_name ||
+              lineItem.description ||
+              "",
+
+            variant_name:
+              metadata.variant_name ||
+              "",
+
+            quantity,
+
+            unit_price:
+              unitPrice,
+
+            amount_total:
+              amountTotal,
+
+            supplier:
+              metadata.supplier ||
+              "",
+
+            supplier_url:
+              metadata.supplier_url ||
+              "",
+
+            supplier_product_id:
+              metadata
+                .supplier_product_id ||
+              "",
+
+            supplier_variant_id:
+              metadata
+                .supplier_variant_id ||
+              "",
+
+            supplier_sku:
+              metadata.supplier_sku ||
+              "",
+
+            supplier_cost:
+              Number(
+                metadata
+                  .supplier_cost ||
+                  0
+              ),
+          };
+        }
+      );
+
+    const totalSupplierCost =
+      items.reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.supplier_cost ||
+              0
+          ) *
+            Number(
+              item.quantity ||
+                1
+            ),
+        0
+      );
+
+    const saleAmount =
+      Number(
+        session.amount_total ||
+          0
+      ) / 100;
+
+    const estimatedProfit =
+      saleAmount -
+      totalSupplierCost;
+
+    const {
+      error: orderError,
+    } = await db
+      .from("orders")
+      .upsert(
+        {
+          stripe_session_id:
+            session.id,
+
+          amount_total:
+            session.amount_total,
+
+          payment_status:
+            session.payment_status,
+
+          customer_email:
+            session
+              .customer_details
+              ?.email || "",
+
+          customer_name:
+            shipping?.name ||
+            session
+              .customer_details
+              ?.name ||
+            "",
+
+          shipping_address:
+            address
+              ? [
+                  address.line1,
+                  address.line2,
+                  address.city,
+                  address.state,
+                  address.postal_code,
+                  address.country,
+                ]
+                  .filter(
+                    Boolean
+                  )
+                  .join(", ")
+              : "",
+
+          items,
+
+          supplier_cost:
+            totalSupplierCost,
+
+          estimated_profit:
+            estimatedProfit,
+
+          fulfillment_status:
+            "unfulfilled",
+        },
+        {
+          onConflict:
+            "stripe_session_id",
+        }
+      );
+
+    if (orderError) {
+      console.error(
+        "Order save failed:",
+        orderError
+      );
+
+      return new Response(
+        "Order save failed",
+        {
+          status: 500,
+        }
+      );
+    }
+  }
+
+  return Response.json({
+    received: true,
+  });
 }
