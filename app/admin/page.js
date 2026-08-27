@@ -372,8 +372,7 @@ async function toggleProduct(fd) {
 
   await requireAdmin();
 
-  const db =
-    createAdminClient();
+  const db = createAdminClient();
 
   const productId =
     String(
@@ -406,8 +405,7 @@ async function deleteProduct(fd) {
 
   await requireAdmin();
 
-  const db =
-    createAdminClient();
+  const db = createAdminClient();
 
   const productId =
     String(
@@ -451,8 +449,7 @@ async function updateOrder(fd) {
 
   await requireAdmin();
 
-  const db =
-    createAdminClient();
+  const db = createAdminClient();
 
   const orderId =
     String(
@@ -756,6 +753,7 @@ function ProductEditor({
 
           <label>
             Replace product images
+
             <input
               name="images"
               type="file"
@@ -935,92 +933,245 @@ function ProductEditor({
   );
 }
 
+function getItemMissingInfo(item) {
+  const missing = [];
+
+  if (
+    !String(
+      item.supplier_url || ""
+    ).trim()
+  ) {
+    missing.push(
+      "Supplier URL"
+    );
+  }
+
+  const supplierCost =
+    Number(
+      item.supplier_cost
+    );
+
+  if (
+    item.supplier_cost ===
+      null ||
+    item.supplier_cost ===
+      undefined ||
+    item.supplier_cost ===
+      "" ||
+    !Number.isFinite(
+      supplierCost
+    ) ||
+    supplierCost <= 0
+  ) {
+    missing.push(
+      "Supplier cost"
+    );
+  }
+
+  const productId =
+    String(
+      item.supplier_product_id ||
+        ""
+    ).trim();
+
+  const variantId =
+    String(
+      item.supplier_variant_id ||
+        ""
+    ).trim();
+
+  const sku =
+    String(
+      item.supplier_sku || ""
+    ).trim();
+
+  const hasVariant =
+    Boolean(
+      String(
+        item.variant_name || ""
+      ).trim()
+    );
+
+  if (hasVariant) {
+    if (
+      !variantId &&
+      !sku
+    ) {
+      missing.push(
+        "Variant ID or SKU"
+      );
+    }
+  } else {
+    if (
+      !productId &&
+      !sku
+    ) {
+      missing.push(
+        "Product ID or SKU"
+      );
+    }
+  }
+
+  return missing;
+}
+
 function SupplierPrep({
   order,
   items,
 }) {
   const hasAddress =
     Boolean(
-      order.shipping_address
+      String(
+        order.shipping_address ||
+          ""
+      ).trim()
     );
 
-  const readyItems =
-    items.filter(
-      (item) =>
-        Boolean(
-          item.supplier_url
-        )
+  const itemChecks =
+    items.map(
+      (item) => ({
+        item,
+        missing:
+          getItemMissingInfo(
+            item
+          ),
+      })
     );
 
   const allItemsReady =
     items.length > 0 &&
-    readyItems.length ===
-      items.length &&
-    hasAddress;
+    itemChecks.every(
+      (check) =>
+        check.missing.length ===
+        0
+    );
+
+  const orderReady =
+    hasAddress &&
+    allItemsReady;
+
+  const totalExpectedSupplierCost =
+    items.reduce(
+      (sum, item) => {
+        const quantity =
+          Number(
+            item.quantity || 1
+          );
+
+        const cost =
+          Number(
+            item.supplier_cost ||
+              0
+          );
+
+        return (
+          sum +
+          cost * quantity
+        );
+      },
+      0
+    );
 
   const prepText = [
-    `SOUTHSTAR SUPPLIER ORDER`,
-    ``,
-    `CUSTOMER`,
+    "SOUTHSTAR SUPPLIER ORDER",
+    "",
+    `STATUS: ${
+      orderReady
+        ? "READY TO ORDER"
+        : "MISSING REQUIRED INFO"
+    }`,
+    "",
+    "CUSTOMER",
     `${order.customer_name || ""}`,
     `${order.customer_email || ""}`,
-    ``,
-    `SHIP TO`,
+    "",
+    "SHIP TO",
     `${order.shipping_address || ""}`,
-    ``,
-    `ITEMS`,
+    "",
+    "ITEMS",
+
     ...items.flatMap(
-      (item, index) => [
-        ``,
-        `${index + 1}. ${
-          item.product_name ||
-          "Product"
-        }`,
-        item.variant_name
-          ? `Variant: ${item.variant_name}`
-          : null,
-        `Quantity: ${
-          item.quantity || 1
-        }`,
-        item.supplier
-          ? `Supplier: ${item.supplier}`
-          : null,
-        item.supplier_product_id
-          ? `Product ID: ${item.supplier_product_id}`
-          : null,
-        item.supplier_variant_id
-          ? `Variant ID: ${item.supplier_variant_id}`
-          : null,
-        item.supplier_sku
-          ? `SKU: ${item.supplier_sku}`
-          : null,
-        item.supplier_cost !==
-          undefined &&
-        item.supplier_cost !==
-          null
-          ? `Supplier cost each: $${Number(
-              item.supplier_cost ||
-                0
-            ).toFixed(2)}`
-          : null,
-        item.supplier_url
-          ? `Supplier URL: ${item.supplier_url}`
-          : null,
-      ].filter(Boolean)
+      (item, index) => {
+        const missing =
+          getItemMissingInfo(
+            item
+          );
+
+        return [
+          "",
+          `${index + 1}. ${
+            item.product_name ||
+            "Product"
+          }`,
+
+          item.variant_name
+            ? `Variant: ${item.variant_name}`
+            : null,
+
+          `Quantity: ${
+            item.quantity || 1
+          }`,
+
+          item.supplier
+            ? `Supplier: ${item.supplier}`
+            : null,
+
+          item.supplier_product_id
+            ? `Product ID: ${item.supplier_product_id}`
+            : null,
+
+          item.supplier_variant_id
+            ? `Variant ID: ${item.supplier_variant_id}`
+            : null,
+
+          item.supplier_sku
+            ? `SKU: ${item.supplier_sku}`
+            : null,
+
+          item.supplier_cost !==
+            undefined &&
+          item.supplier_cost !==
+            null
+            ? `Supplier cost each: $${Number(
+                item.supplier_cost ||
+                  0
+              ).toFixed(2)}`
+            : null,
+
+          item.supplier_url
+            ? `Supplier URL: ${item.supplier_url}`
+            : null,
+
+          missing.length > 0
+            ? `MISSING: ${missing.join(
+                ", "
+              )}`
+            : "READY",
+        ].filter(Boolean);
+      }
     ),
+
+    "",
+    `EXPECTED SUPPLIER TOTAL: $${totalExpectedSupplierCost.toFixed(
+      2
+    )}`,
   ].join("\n");
 
   return (
     <div
       style={{
-        border:
-          "2px solid #ddd",
+        border: orderReady
+          ? "2px solid #1f7a3d"
+          : "2px solid #b7791f",
+
         padding: "18px",
         borderRadius: "10px",
         margin:
           "24px 0",
-        background:
-          "#faf9f5",
+
+        background: orderReady
+          ? "#f3faf5"
+          : "#fffaf0",
       }}
     >
       <div
@@ -1042,42 +1193,70 @@ function SupplierPrep({
           Supplier Order Prep
         </h3>
 
-        <strong>
-          {allItemsReady
-            ? "✓ Ready for manual order"
-            : "⚠ Missing supplier info"}
+        <strong
+          style={{
+            fontSize: "14px",
+          }}
+        >
+          {orderReady
+            ? "✓ READY TO ORDER"
+            : "⚠ MISSING REQUIRED INFO"}
         </strong>
       </div>
 
-      {!hasAddress && (
+      <p
+        style={{
+          marginBottom:
+            "6px",
+        }}
+      >
+        <strong>
+          Fulfillment validation
+        </strong>
+      </p>
+
+      {hasAddress ? (
         <p>
-          ⚠ Customer shipping
-          address is missing.
+          ✓ Shipping address
+          present
+        </p>
+      ) : (
+        <p>
+          ⚠ Missing customer
+          shipping address
         </p>
       )}
 
-      {items.map(
-        (item, index) => {
-          const missing = [];
+      {items.length === 0 && (
+        <p>
+          ⚠ No order items
+          available
+        </p>
+      )}
 
-          if (
-            !item.supplier_url
-          ) {
-            missing.push(
-              "supplier URL"
+      {itemChecks.map(
+        (
+          {
+            item,
+            missing,
+          },
+          index
+        ) => {
+          const quantity =
+            Number(
+              item.quantity ||
+                1
             );
-          }
 
-          if (
-            item.variant_name &&
-            !item
-              .supplier_variant_id &&
-            !item.supplier_sku
-          ) {
-            missing.push(
-              "variant ID/SKU"
+          const itemCost =
+            Number(
+              item.supplier_cost ||
+                0
             );
-          }
+
+          const expectedTotal =
+            quantity *
+            itemCost;
 
           return (
             <div
@@ -1092,13 +1271,16 @@ function SupplierPrep({
               }}
             >
               <strong>
+                {index + 1}.{" "}
                 {item.product_name ||
                   "Product"}
               </strong>
 
               {item.variant_name && (
                 <p>
-                  Variant:{" "}
+                  <strong>
+                    Variant:
+                  </strong>{" "}
                   {
                     item.variant_name
                   }
@@ -1106,27 +1288,112 @@ function SupplierPrep({
               )}
 
               <p>
-                Quantity:{" "}
-                {item.quantity ||
-                  1}
+                <strong>
+                  Quantity:
+                </strong>{" "}
+                {quantity}
               </p>
 
-              {missing.length >
-                0 ? (
-                <p>
-                  ⚠ Missing:{" "}
+              <p>
+                <strong>
+                  Expected supplier
+                  total:
+                </strong>{" "}
+                $
+                {expectedTotal.toFixed(
+                  2
+                )}
+              </p>
+
+              {missing.length ===
+              0 ? (
+                <div
+                  style={{
+                    border:
+                      "1px solid #b7ddc1",
+                    background:
+                      "#edf8f0",
+                    padding:
+                      "10px",
+                    borderRadius:
+                      "7px",
+                    marginBottom:
+                      "12px",
+                  }}
+                >
+                  <strong>
+                    ✓ Item ready for
+                    supplier order
+                  </strong>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    border:
+                      "1px solid #ecd29b",
+                    background:
+                      "#fff7e6",
+                    padding:
+                      "10px",
+                    borderRadius:
+                      "7px",
+                    marginBottom:
+                      "12px",
+                  }}
+                >
+                  <strong>
+                    ⚠ Missing:
+                  </strong>{" "}
                   {missing.join(
                     ", "
                   )}
-                </p>
-              ) : (
-                <p>
-                  ✓ Supplier mapping
-                  present
-                </p>
+                </div>
               )}
 
-              {item.supplier_url && (
+              <p>
+                <strong>
+                  Supplier:
+                </strong>{" "}
+                {item.supplier ||
+                  "Not set"}
+              </p>
+
+              <p>
+                <strong>
+                  Product ID:
+                </strong>{" "}
+                {item.supplier_product_id ||
+                  "Not set"}
+              </p>
+
+              <p>
+                <strong>
+                  Variant ID:
+                </strong>{" "}
+                {item.supplier_variant_id ||
+                  "Not set"}
+              </p>
+
+              <p>
+                <strong>
+                  SKU:
+                </strong>{" "}
+                {item.supplier_sku ||
+                  "Not set"}
+              </p>
+
+              <p>
+                <strong>
+                  Supplier cost each:
+                </strong>{" "}
+                $
+                {Number(
+                  item.supplier_cost ||
+                    0
+                ).toFixed(2)}
+              </p>
+
+              {item.supplier_url ? (
                 <a
                   href={
                     item.supplier_url
@@ -1144,6 +1411,11 @@ function SupplierPrep({
                   Open supplier
                   product →
                 </a>
+              ) : (
+                <p>
+                  No supplier URL
+                  available.
+                </p>
               )}
             </div>
           );
@@ -1151,6 +1423,26 @@ function SupplierPrep({
       )}
 
       <hr />
+
+      <p>
+        <strong>
+          Expected supplier order
+          total
+        </strong>
+      </p>
+
+      <p
+        style={{
+          fontSize: "24px",
+          fontWeight: "800",
+          marginTop: 0,
+        }}
+      >
+        $
+        {totalExpectedSupplierCost.toFixed(
+          2
+        )}
+      </p>
 
       <p>
         <strong>
@@ -1165,7 +1457,7 @@ function SupplierPrep({
         style={{
           width: "100%",
           minHeight:
-            "300px",
+            "340px",
           padding: "12px",
           fontFamily:
             "monospace",
@@ -1176,9 +1468,8 @@ function SupplierPrep({
       <p className="muted">
         On iPhone, press and
         hold inside this box to
-        select/copy the order
-        information when placing
-        the supplier order.
+        select and copy the order
+        information.
       </p>
     </div>
   );
@@ -1209,6 +1500,21 @@ function OrderManager({
       ? order.items
       : [];
 
+  const orderReady =
+    Boolean(
+      String(
+        order.shipping_address ||
+          ""
+      ).trim()
+    ) &&
+    items.length > 0 &&
+    items.every(
+      (item) =>
+        getItemMissingInfo(
+          item
+        ).length === 0
+    );
+
   return (
     <details
       className="panel"
@@ -1228,6 +1534,10 @@ function OrderManager({
         ${amount.toFixed(2)}
         {" -- "}
         {status}
+        {" -- "}
+        {orderReady
+          ? "READY"
+          : "NEEDS INFO"}
       </summary>
 
       <div
@@ -1235,6 +1545,31 @@ function OrderManager({
           marginTop: "20px",
         }}
       >
+        <div
+          style={{
+            border:
+              orderReady
+                ? "1px solid #b7ddc1"
+                : "1px solid #ecd29b",
+
+            background:
+              orderReady
+                ? "#edf8f0"
+                : "#fff7e6",
+
+            padding: "12px",
+            borderRadius: "8px",
+            marginBottom:
+              "20px",
+          }}
+        >
+          <strong>
+            {orderReady
+              ? "✓ This order has the required supplier information."
+              : "⚠ This order is not ready for supplier purchasing yet."}
+          </strong>
+        </div>
+
         <p>
           <strong>
             Customer
@@ -1477,8 +1812,7 @@ function OrderManager({
             <p>
               <strong>
                 Order estimated
-                profit:{" "}
-                $
+                profit: $
                 {Number(
                   order
                     .estimated_profit
@@ -1687,6 +2021,7 @@ export default async function Admin() {
       <div className="stats">
         <div>
           ORDERS
+
           <b>
             {orders?.length || 0}
           </b>
@@ -1694,6 +2029,7 @@ export default async function Admin() {
 
         <div>
           REVENUE
+
           <b>
             ${revenue.toFixed(2)}
           </b>
@@ -1701,6 +2037,7 @@ export default async function Admin() {
 
         <div>
           PRODUCTS
+
           <b>
             {products?.length ||
               0}
