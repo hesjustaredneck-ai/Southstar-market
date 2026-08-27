@@ -228,9 +228,7 @@ async function updateProduct(fd) {
     String(fd.get("product_id") || "");
 
   if (!productId) {
-    throw new Error(
-      "Missing product ID"
-    );
+    throw new Error("Missing product ID");
   }
 
   const {
@@ -243,9 +241,7 @@ async function updateProduct(fd) {
     .maybeSingle();
 
   if (existingError || !existing) {
-    throw new Error(
-      "Product not found"
-    );
+    throw new Error("Product not found");
   }
 
   const files = fd
@@ -264,11 +260,6 @@ async function updateProduct(fd) {
   let mainImage =
     existing.image_url || "";
 
-  /*
-    If new images are uploaded while editing,
-    they replace the current gallery.
-    If no images are uploaded, the old images remain.
-  */
   if (files.length > 0) {
     imageUrls =
       await uploadImages(db, files);
@@ -410,7 +401,7 @@ async function deleteProduct(fd) {
 
   if (confirmation !== "DELETE") {
     throw new Error(
-      "Delete cancelled. Type DELETE exactly to confirm."
+      "Type DELETE exactly to confirm."
     );
   }
 
@@ -422,6 +413,131 @@ async function deleteProduct(fd) {
   if (error) {
     throw new Error(
       `Product deletion failed: ${error.message}`
+    );
+  }
+
+  redirect("/admin");
+}
+
+async function updateOrder(fd) {
+  "use server";
+
+  await requireAdmin();
+
+  const db = createAdminClient();
+
+  const orderId =
+    String(fd.get("order_id") || "");
+
+  if (!orderId) {
+    throw new Error("Missing order ID");
+  }
+
+  const {
+    data: existingOrder,
+    error: orderError,
+  } = await db
+    .from("orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (orderError || !existingOrder) {
+    throw new Error("Order not found");
+  }
+
+  const fulfillmentStatus =
+    String(
+      fd.get("fulfillment_status") ||
+        "unfulfilled"
+    );
+
+  const supplierCostValue =
+    String(
+      fd.get("supplier_cost") || ""
+    ).trim();
+
+  const supplierCost =
+    supplierCostValue === ""
+      ? null
+      : Number(supplierCostValue);
+
+  const saleAmount =
+    Number(
+      existingOrder.amount_total || 0
+    ) / 100;
+
+  const estimatedProfit =
+    supplierCost !== null &&
+    Number.isFinite(supplierCost)
+      ? saleAmount - supplierCost
+      : null;
+
+  const updates = {
+    fulfillment_status:
+      fulfillmentStatus,
+
+    tracking_number:
+      String(
+        fd.get("tracking_number") || ""
+      ).trim(),
+
+    carrier:
+      String(
+        fd.get("carrier") || ""
+      ).trim(),
+
+    supplier_order_id:
+      String(
+        fd.get("supplier_order_id") || ""
+      ).trim(),
+
+    supplier_order_status:
+      String(
+        fd.get(
+          "supplier_order_status"
+        ) || ""
+      ).trim(),
+
+    supplier_cost:
+      supplierCost,
+
+    estimated_profit:
+      estimatedProfit,
+  };
+
+  if (
+    fulfillmentStatus === "shipped" &&
+    !existingOrder.fulfilled_at
+  ) {
+    updates.fulfilled_at =
+      new Date().toISOString();
+  }
+
+  if (
+    fulfillmentStatus === "delivered" &&
+    !existingOrder.delivered_at
+  ) {
+    updates.delivered_at =
+      new Date().toISOString();
+  }
+
+  if (
+    fulfillmentStatus === "refunded" &&
+    !existingOrder.refunded_at
+  ) {
+    updates.refunded_at =
+      new Date().toISOString();
+  }
+
+  const { error } = await db
+    .from("orders")
+    .update(updates)
+    .eq("id", orderId);
+
+  if (error) {
+    throw new Error(
+      `Order update failed: ${error.message}`
     );
   }
 
@@ -717,43 +833,279 @@ function ProductEditor({ product }) {
           }}
         />
 
-        <div>
-          <h3>
+        <h3>
+          Delete product
+        </h3>
+
+        <form
+          action={deleteProduct}
+          className="form"
+        >
+          <input
+            type="hidden"
+            name="product_id"
+            value={product.id}
+          />
+
+          <input
+            name="delete_confirmation"
+            placeholder='Type "DELETE" to confirm'
+          />
+
+          <button type="submit">
             Delete product
-          </h3>
+          </button>
+        </form>
+      </div>
+    </details>
+  );
+}
 
-          <p className="muted">
-            This removes the product
-            listing. Historical order
-            records remain in the
-            orders table.
-          </p>
+function OrderManager({ order }) {
+  const status =
+    order.fulfillment_status ||
+    "unfulfilled";
 
-          <form
-            action={deleteProduct}
-            className="form"
-          >
-            <input
-              type="hidden"
-              name="product_id"
-              value={product.id}
-            />
+  const amount =
+    Number(order.amount_total || 0) /
+    100;
 
-            <input
-              name="delete_confirmation"
-              placeholder='Type "DELETE" to confirm'
-            />
+  const supplierCost =
+    order.supplier_cost === null ||
+    order.supplier_cost === undefined
+      ? ""
+      : order.supplier_cost;
 
-            <button
-              type="submit"
+  return (
+    <details
+      className="panel"
+      style={{
+        marginTop: "16px",
+      }}
+    >
+      <summary
+        style={{
+          cursor: "pointer",
+          fontWeight: "700",
+        }}
+      >
+        {order.customer_name ||
+          "Customer"}
+        {" -- "}
+        ${amount.toFixed(2)}
+        {" -- "}
+        {status}
+      </summary>
+
+      <div
+        style={{
+          marginTop: "20px",
+        }}
+      >
+        <p>
+          <strong>
+            Customer
+          </strong>
+        </p>
+
+        <p>
+          {order.customer_name}
+        </p>
+
+        <p>
+          {order.customer_email}
+        </p>
+
+        <p>
+          <strong>
+            Shipping address
+          </strong>
+        </p>
+
+        <p>
+          {order.shipping_address}
+        </p>
+
+        <p>
+          <strong>
+            Items
+          </strong>
+        </p>
+
+        <pre
+          style={{
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {JSON.stringify(
+            order.items,
+            null,
+            2
+          )}
+        </pre>
+
+        <p>
+          <strong>
+            Payment
+          </strong>
+        </p>
+
+        <p>
+          Status:{" "}
+          {order.payment_status}
+        </p>
+
+        <p>
+          Sale amount: $
+          {amount.toFixed(2)}
+        </p>
+
+        <hr />
+
+        <h3>
+          Fulfillment
+        </h3>
+
+        <form
+          action={updateOrder}
+          className="form"
+        >
+          <input
+            type="hidden"
+            name="order_id"
+            value={order.id}
+          />
+
+          <label>
+            Fulfillment status
+            <select
+              name="fulfillment_status"
+              defaultValue={status}
               style={{
-                background: "#eee",
+                width: "100%",
+                padding: "13px",
               }}
             >
-              Delete product
-            </button>
-          </form>
-        </div>
+              <option value="unfulfilled">
+                Unfulfilled
+              </option>
+
+              <option value="processing">
+                Processing
+              </option>
+
+              <option value="ordered_from_supplier">
+                Ordered from supplier
+              </option>
+
+              <option value="shipped">
+                Shipped
+              </option>
+
+              <option value="delivered">
+                Delivered
+              </option>
+
+              <option value="refunded">
+                Refunded
+              </option>
+            </select>
+          </label>
+
+          <input
+            name="supplier_order_id"
+            defaultValue={
+              order.supplier_order_id ||
+              ""
+            }
+            placeholder="Supplier order ID"
+          />
+
+          <input
+            name="supplier_order_status"
+            defaultValue={
+              order.supplier_order_status ||
+              ""
+            }
+            placeholder="Supplier order status"
+          />
+
+          <input
+            name="supplier_cost"
+            type="number"
+            step="0.01"
+            defaultValue={
+              supplierCost
+            }
+            placeholder="Actual supplier cost"
+          />
+
+          <input
+            name="carrier"
+            defaultValue={
+              order.carrier || ""
+            }
+            placeholder="Carrier -- e.g. USPS"
+          />
+
+          <input
+            name="tracking_number"
+            defaultValue={
+              order.tracking_number ||
+              ""
+            }
+            placeholder="Tracking number"
+          />
+
+          <button
+            type="submit"
+            className="primary"
+          >
+            Save order
+          </button>
+        </form>
+
+        {order.estimated_profit !==
+          null &&
+          order.estimated_profit !==
+            undefined && (
+            <p>
+              <strong>
+                Estimated profit:
+                {" $"}
+                {Number(
+                  order.estimated_profit
+                ).toFixed(2)}
+              </strong>
+            </p>
+          )}
+
+        {order.fulfilled_at && (
+          <p className="muted">
+            Shipped:{" "}
+            {new Date(
+              order.fulfilled_at
+            ).toLocaleString()}
+          </p>
+        )}
+
+        {order.delivered_at && (
+          <p className="muted">
+            Delivered:{" "}
+            {new Date(
+              order.delivered_at
+            ).toLocaleString()}
+          </p>
+        )}
+
+        {order.refunded_at && (
+          <p className="muted">
+            Refunded:{" "}
+            {new Date(
+              order.refunded_at
+            ).toLocaleString()}
+          </p>
+        )}
       </div>
     </details>
   );
@@ -914,20 +1266,14 @@ export default async function Admin() {
 
           <hr />
 
-          <div>
-            <p className="eyebrow">
-              OPTIONAL
-            </p>
+          <h3>
+            Product variants
+          </h3>
 
-            <h3>
-              Product variants
-            </h3>
-
-            <p className="muted">
-              Leave these blank if the
-              product has no options.
-            </p>
-          </div>
+          <p className="muted">
+            Leave these blank if the
+            product has no options.
+          </p>
 
           <VariantRow number={1} />
           <VariantRow number={2} />
@@ -950,13 +1296,6 @@ export default async function Admin() {
           Manage products
         </h2>
 
-        <p className="muted">
-          Tap a product below to edit
-          its listing, variants,
-          supplier information, status,
-          or images.
-        </p>
-
         {(products || []).map(
           (product) => (
             <ProductEditor
@@ -969,60 +1308,28 @@ export default async function Admin() {
 
       <section className="panel">
         <h2>
-          Orders
+          Orders & Fulfillment
         </h2>
 
-        {(orders || []).map(
-          (order) => (
-            <div
-              className="order"
-              key={order.id}
-            >
-              <p>
-                <strong>
-                  {order.customer_name ||
-                    "Customer"}
-                </strong>
-              </p>
+        <p className="muted">
+          Open an order to manage
+          supplier purchasing, shipping,
+          tracking, and delivery.
+        </p>
 
-              <p>
-                {order.customer_email}
-              </p>
-
-              <p>
-                {order.shipping_address}
-              </p>
-
-              <p>
-                Amount: $
-                {(
-                  Number(
-                    order.amount_total ||
-                      0
-                  ) / 100
-                ).toFixed(2)}
-              </p>
-
-              <p>
-                Payment:{" "}
-                {order.payment_status}
-              </p>
-
-              <p>
-                Fulfillment:{" "}
-                {order.fulfillment_status ||
-                  "unfulfilled"}
-              </p>
-
-              <pre>
-                {JSON.stringify(
-                  order.items,
-                  null,
-                  2
-                )}
-              </pre>
-            </div>
+        {(orders || []).length > 0 ? (
+          (orders || []).map(
+            (order) => (
+              <OrderManager
+                key={order.id}
+                order={order}
+              />
+            )
           )
+        ) : (
+          <p>
+            No orders yet.
+          </p>
         )}
       </section>
     </main>
