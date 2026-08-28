@@ -1,30 +1,10 @@
-import { createClient } from "../../../lib/supabase/server";
 import { createAdminClient } from "../../../lib/supabase/admin";
 
 const HEADERS = [
-  "Order_number",
-  "Date",
-  "Country(Short Name of Country)",
-  "Product_id",
-  "Sku",
-  "Product_count",
-  "Order_memo",
-  "Contact_person",
-  "Mobile_no",
-  "Email(Optional)",
-  "Address",
-  "Address2",
-  "Province",
-  "City",
-  "ZIP",
-  "RUT(Chile; Optional)",
-  "Personal Clearance ID(Korea, Oman; Optional)",
-  "Passport/Alien registration Card Number(Korea, Oman; Optional)",
-  "CPF(Brazil; Optional)",
-  "Turkish ID Number(Turkey; Optional)",
-  "Passport Number(Turkey; Optional)",
-  "RUC(Peru; Optional)",
-  "RFC/CURP(Mexico; Optional)",
+  "product_id",
+  "SKU（your product SKU）",
+  "Supplier_url（Optional）",
+  "SKU（Supplier SKU）（Optional）",
 ];
 
 function csvCell(value) {
@@ -35,9 +15,7 @@ function csvCell(value) {
 
 function rowsToCsv(headers, rows) {
   return [headers, ...rows]
-    .map((row) =>
-      row.map(csvCell).join(",")
-    )
+    .map((row) => row.map(csvCell).join(","))
     .join("\n");
 }
 
@@ -47,203 +25,56 @@ function cleanText(value) {
     .trim();
 }
 
-function cleanAddress(value) {
-  return cleanText(value)
-    .replace(
-      /[^a-zA-Z0-9\s-]/g,
-      " "
-    )
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function cleanPhone(value) {
-  const original =
-    cleanText(value);
-
-  const hasPlus =
-    original.startsWith("+");
-
-  const digits =
-    original.replace(
-      /\D/g,
-      ""
-    );
-
-  if (!digits) {
-    return "";
-  }
-
-  return (
-    (hasPlus ? "+" : "") +
-    digits
-  );
-}
-
-function countryCode(value) {
-  const country =
-    cleanText(value);
-
-  const upper =
-    country.toUpperCase();
-
-  if (
-    upper === "US" ||
-    upper === "USA" ||
-    upper ===
-      "UNITED STATES" ||
-    upper ===
-      "UNITED STATES OF AMERICA"
-  ) {
-    return "US";
-  }
-
-  return country;
-}
-
-function makeDsersSkuFromItem(
-  item
+function makeDsersSkuFromProduct(
+  product,
+  variant = null,
+  variantIndex = 0
 ) {
-  const supplierSku =
-    cleanText(
-      item.supplier_sku
-    );
+  const variantSupplierSku =
+    cleanText(variant?.supplier_sku);
 
-  if (supplierSku) {
-    return supplierSku;
+  if (variantSupplierSku) {
+    return variantSupplierSku;
   }
 
-  const productId =
-    cleanText(
-      item.product_id
-    );
-
-  const variantId =
-    cleanText(
-      item.supplier_variant_id
-    );
-
-  const hasVariant =
-    Boolean(
+  if (variant) {
+    const variantId =
       cleanText(
-        item.variant_name
-      )
-    );
+        variant?.supplier_variant_id
+      );
 
-  if (
-    hasVariant &&
-    variantId
-  ) {
-    return `SS-${productId}-${variantId}`;
+    if (variantId) {
+      return `SS-${product.id}-${variantId}`;
+    }
+
+    return `SS-${product.id}-V${variantIndex + 1}`;
   }
 
-  if (productId) {
-    return `SS-${productId}`;
+  const productSupplierSku =
+    cleanText(product.supplier_sku);
+
+  if (productSupplierSku) {
+    return productSupplierSku;
   }
 
-  return "";
+  return `SS-${product.id}`;
 }
 
-function formatDate(value) {
-  const date =
-    value
-      ? new Date(value)
-      : new Date();
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return new Date()
-      .toISOString()
-      .slice(0, 10);
-  }
-
-  return date
-    .toISOString()
-    .slice(0, 10);
-}
-
-async function requireAdmin() {
-  const s =
-    await createClient();
-
-  const {
-    data: { user },
-  } =
-    await s.auth.getUser();
-
-  if (!user) {
-    return false;
-  }
-
-  const { data } =
-    await s
-      .from("admins")
-      .select("user_id")
-      .eq(
-        "user_id",
-        user.id
-      )
-      .maybeSingle();
-
-  return Boolean(data);
-}
-
-export async function GET(req) {
+export async function GET() {
   try {
-    const isAdmin =
-      await requireAdmin();
-
-    if (!isAdmin) {
-      return Response.json(
-        {
-          error:
-            "Unauthorized",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    const url =
-      new URL(req.url);
-
-    const orderId =
-      cleanText(
-        url.searchParams.get(
-          "id"
-        )
-      );
-
-    if (!orderId) {
-      return Response.json(
-        {
-          error:
-            "Missing order ID",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
     const db =
       createAdminClient();
 
     const {
-      data: order,
+      data: products,
       error,
     } = await db
-      .from("orders")
+      .from("products")
       .select("*")
-      .eq(
-        "id",
-        orderId
-      )
-      .maybeSingle();
+      .eq("active", true)
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (error) {
       throw new Error(
@@ -251,132 +82,60 @@ export async function GET(req) {
       );
     }
 
-    if (!order) {
-      return Response.json(
-        {
-          error:
-            "Order not found",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
+    const rows = [];
 
-    const items =
-      Array.isArray(
-        order.items
-      )
-        ? order.items
-        : [];
-
-    if (
-      items.length === 0
+    for (
+      const product of products || []
     ) {
-      return Response.json(
-        {
-          error:
-            "Order has no items",
-        },
-        {
-          status: 400,
-        }
-      );
+      const variants =
+        Array.isArray(
+          product.variants
+        )
+          ? product.variants
+          : [];
+
+      if (variants.length > 0) {
+        variants.forEach(
+          (variant, index) => {
+            rows.push([
+              product.id,
+
+              makeDsersSkuFromProduct(
+                product,
+                variant,
+                index
+              ),
+
+              cleanText(
+                product.supplier_url
+              ),
+
+              cleanText(
+                variant.supplier_sku
+              ),
+            ]);
+          }
+        );
+
+        continue;
+      }
+
+      rows.push([
+        product.id,
+
+        makeDsersSkuFromProduct(
+          product
+        ),
+
+        cleanText(
+          product.supplier_url
+        ),
+
+        cleanText(
+          product.supplier_sku
+        ),
+      ]);
     }
-
-    const orderNumber =
-      cleanText(order.id) ||
-      cleanText(
-        order.stripe_session_id
-      );
-
-    const date =
-      formatDate(
-        order.created_at
-      );
-
-    const country =
-      countryCode(
-        order.shipping_country
-      );
-
-    const phone =
-      cleanPhone(
-        order.customer_phone
-      );
-
-    const address1 =
-      cleanAddress(
-        order
-          .shipping_address_line1
-      );
-
-    const address2 =
-      cleanAddress(
-        order
-          .shipping_address_line2
-      );
-
-    const rows =
-      items.map(
-        (item) => [
-          orderNumber,
-
-          date,
-
-          country,
-
-          cleanText(
-            item.product_id
-          ),
-
-          makeDsersSkuFromItem(
-            item
-          ),
-
-          Number(
-            item.quantity || 1
-          ),
-
-          "",
-
-          cleanText(
-            order.customer_name
-          ),
-
-          phone,
-
-          cleanText(
-            order.customer_email
-          ),
-
-          address1,
-
-          address2,
-
-          cleanText(
-            order.shipping_state
-          ),
-
-          cleanText(
-            order.shipping_city
-          ),
-
-          cleanText(
-            order
-              .shipping_postal_code
-          ),
-
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-        ]
-      );
 
     const csv =
       rowsToCsv(
@@ -384,24 +143,21 @@ export async function GET(req) {
         rows
       );
 
-    return new Response(
-      csv,
-      {
-        headers: {
-          "Content-Type":
-            "text/csv; charset=utf-8",
+    return new Response(csv, {
+      headers: {
+        "Content-Type":
+          "text/csv; charset=utf-8",
 
-          "Content-Disposition":
-            `attachment; filename="southstar-dsers-order-${orderId}.csv"`,
+        "Content-Disposition":
+          'attachment; filename="southstar-dsers-products.csv"',
 
-          "Cache-Control":
-            "no-store",
-        },
-      }
-    );
+        "Cache-Control":
+          "no-store",
+      },
+    });
   } catch (error) {
     console.error(
-      "DSers order export error:",
+      "DSers product export error:",
       error
     );
 
@@ -409,7 +165,7 @@ export async function GET(req) {
       {
         error:
           error?.message ||
-          "Order export failed",
+          "Export failed",
       },
       {
         status: 500,
