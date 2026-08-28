@@ -62,12 +62,14 @@ function cleanPhone(value) {
   const hasPlus = original.startsWith("+");
   const digits = original.replace(/\D/g, "");
 
-  if (!digits) return "";
+  if (!digits) {
+    return "";
+  }
 
   return (hasPlus ? "+" : "") + digits;
 }
 
-function countryCode(value) {
+function countryName(value) {
   const country = cleanText(value);
   const upper = country.toUpperCase();
 
@@ -77,7 +79,7 @@ function countryCode(value) {
     upper === "UNITED STATES" ||
     upper === "UNITED STATES OF AMERICA"
   ) {
-    return "US";
+    return "United States";
   }
 
   return country;
@@ -103,15 +105,13 @@ function getVariantSkuLabel(
   variant,
   variantIndex
 ) {
-  const option1 =
-    skuPart(
-      variant?.option1_value
-    );
+  const option1 = skuPart(
+    variant?.option1_value
+  );
 
-  const option2 =
-    skuPart(
-      variant?.option2_value
-    );
+  const option2 = skuPart(
+    variant?.option2_value
+  );
 
   if (option1 && option2) {
     return `${option1}-${option2}`;
@@ -121,10 +121,9 @@ function getVariantSkuLabel(
     return option1;
   }
 
-  const variantName =
-    skuPart(
-      variant?.name
-    );
+  const variantName = skuPart(
+    variant?.name
+  );
 
   if (variantName) {
     return variantName;
@@ -133,66 +132,31 @@ function getVariantSkuLabel(
   return `V${variantIndex + 1}`;
 }
 
-function makeDsersSkuFromItem(
+function makeSouthstarSkuFromItem(
   item,
   product
 ) {
-  const supplierSku =
-    cleanText(
-      item.supplier_sku
-    );
-
-  if (supplierSku) {
-    return supplierSku;
-  }
-
-  const productId =
-    cleanText(
-      item.product_id
-    );
+  const productId = cleanText(
+    item?.product_id
+  );
 
   if (!productId) {
     return "";
   }
 
-  const variantId =
-    cleanText(
-      item.supplier_variant_id
-    );
+  const variantName = cleanText(
+    item?.variant_name
+  );
 
-  const variantName =
-    cleanText(
-      item.variant_name
-    );
-
-  /*
-    If an actual AliExpress variant ID
-    has already been stored, preserve
-    the existing mapping behavior.
-  */
-  if (
-    variantName &&
-    variantId
-  ) {
-    return `SS-${productId}-${variantId}`;
-  }
-
-  /*
-    For Southstar variants, find the
-    matching current product variant
-    and create the same readable SKU
-    used by the Products CSV.
-  */
   if (
     variantName &&
     product
   ) {
-    const variants =
-      Array.isArray(
-        product.variants
-      )
-        ? product.variants
-        : [];
+    const variants = Array.isArray(
+      product?.variants
+    )
+      ? product.variants
+      : [];
 
     const variantIndex =
       variants.findIndex(
@@ -203,13 +167,9 @@ function makeDsersSkuFromItem(
           variantName.toLowerCase()
       );
 
-    if (
-      variantIndex >= 0
-    ) {
+    if (variantIndex >= 0) {
       const variant =
-        variants[
-          variantIndex
-        ];
+        variants[variantIndex];
 
       const label =
         getVariantSkuLabel(
@@ -222,14 +182,31 @@ function makeDsersSkuFromItem(
   }
 
   /*
-    Non-variant product fallback.
+    Legacy fallback for an order whose
+    variant name no longer exists on the
+    current product.
+
+    This still creates a Southstar SKU.
+    It never substitutes the AliExpress
+    supplier SKU into DSers's Sku column.
+  */
+  if (variantName) {
+    const label =
+      skuPart(variantName);
+
+    if (label) {
+      return `SS-${productId}-${label}`;
+    }
+  }
+
+  /*
+    Non-variant product.
   */
   return `SS-${productId}`;
 }
 
 async function requireAdmin() {
-  const s =
-    await createClient();
+  const s = await createClient();
 
   const {
     data: { user },
@@ -256,8 +233,7 @@ export async function GET(req) {
     if (!isAdmin) {
       return Response.json(
         {
-          error:
-            "Unauthorized",
+          error: "Unauthorized",
         },
         {
           status: 401,
@@ -265,15 +241,11 @@ export async function GET(req) {
       );
     }
 
-    const url =
-      new URL(req.url);
+    const url = new URL(req.url);
 
-    const orderId =
-      cleanText(
-        url.searchParams.get(
-          "id"
-        )
-      );
+    const orderId = cleanText(
+      url.searchParams.get("id")
+    );
 
     if (!orderId) {
       return Response.json(
@@ -318,15 +290,11 @@ export async function GET(req) {
     }
 
     const items =
-      Array.isArray(
-        order.items
-      )
+      Array.isArray(order.items)
         ? order.items
         : [];
 
-    if (
-      items.length === 0
-    ) {
+    if (items.length === 0) {
       return Response.json(
         {
           error:
@@ -339,16 +307,17 @@ export async function GET(req) {
     }
 
     /*
-      Load the current product variants
-      so order SKUs can use the same
-      readable names as Products CSV.
+      Load the current products so the
+      order CSV uses exactly the same
+      Southstar SKU format as the
+      Products CSV.
     */
     const productIds = [
       ...new Set(
         items
           .map((item) =>
             cleanText(
-              item.product_id
+              item?.product_id
             )
           )
           .filter(Boolean)
@@ -358,27 +327,16 @@ export async function GET(req) {
     let productMap =
       new Map();
 
-    if (
-      productIds.length >
-      0
-    ) {
+    if (productIds.length > 0) {
       const {
         data: products,
-        error:
-          productsError,
+        error: productsError,
       } = await db
         .from("products")
-        .select(
-          "id, variants"
-        )
-        .in(
-          "id",
-          productIds
-        );
+        .select("id, variants")
+        .in("id", productIds);
 
-      if (
-        productsError
-      ) {
+      if (productsError) {
         throw new Error(
           productsError.message
         );
@@ -388,9 +346,7 @@ export async function GET(req) {
         new Map(
           (products || []).map(
             (product) => [
-              String(
-                product.id
-              ),
+              String(product.id),
               product,
             ]
           )
@@ -398,9 +354,7 @@ export async function GET(req) {
     }
 
     const orderNumber =
-      cleanText(
-        order.id
-      ) ||
+      cleanText(order.id) ||
       cleanText(
         order.stripe_session_id
       );
@@ -411,7 +365,7 @@ export async function GET(req) {
       );
 
     const country =
-      countryCode(
+      countryName(
         order.shipping_country
       );
 
@@ -422,21 +376,19 @@ export async function GET(req) {
 
     const address1 =
       cleanAddress(
-        order
-          .shipping_address_line1
+        order.shipping_address_line1
       );
 
     const address2 =
       cleanAddress(
-        order
-          .shipping_address_line2
+        order.shipping_address_line2
       );
 
     const rows =
       items.map((item) => {
         const productId =
           cleanText(
-            item.product_id
+            item?.product_id
           );
 
         const product =
@@ -445,7 +397,7 @@ export async function GET(req) {
           );
 
         const sku =
-          makeDsersSkuFromItem(
+          makeSouthstarSkuFromItem(
             item,
             product
           );
@@ -457,7 +409,7 @@ export async function GET(req) {
           productId,
           sku,
           Number(
-            item.quantity || 1
+            item?.quantity || 1
           ),
           "",
           cleanText(
@@ -476,8 +428,7 @@ export async function GET(req) {
             order.shipping_city
           ),
           cleanText(
-            order
-              .shipping_postal_code
+            order.shipping_postal_code
           ),
           "",
           "",
@@ -507,7 +458,13 @@ export async function GET(req) {
             `attachment; filename="southstar-dsers-order-${orderId}.csv"`,
 
           "Cache-Control":
-            "no-store",
+            "no-store, no-cache, must-revalidate",
+
+          Pragma:
+            "no-cache",
+
+          Expires:
+            "0",
         },
       }
     );
