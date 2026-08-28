@@ -1105,28 +1105,6 @@ function getDsersOrderMissingInfo(
         );
       }
 
-      const hasVariant =
-        Boolean(
-          cleanText(
-            item.variant_name
-          )
-        );
-
-      if (
-        hasVariant &&
-        !cleanText(
-          item.supplier_sku
-        ) &&
-        !cleanText(
-          item
-            .supplier_variant_id
-        )
-      ) {
-        missing.push(
-          `Item ${index + 1} variant mapping`
-        );
-      }
-
       if (
         !makeDsersSkuFromItem(
           item

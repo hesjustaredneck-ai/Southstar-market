@@ -29,15 +29,12 @@ const HEADERS = [
 
 function csvCell(value) {
   const text = String(value ?? "");
-
   return `"${text.replace(/"/g, '""')}"`;
 }
 
 function rowsToCsv(headers, rows) {
   return [headers, ...rows]
-    .map((row) =>
-      row.map(csvCell).join(",")
-    )
+    .map((row) => row.map(csvCell).join(","))
     .join("\n");
 }
 
@@ -49,48 +46,30 @@ function cleanText(value) {
 
 function cleanAddress(value) {
   return cleanText(value)
-    .replace(
-      /[^a-zA-Z0-9\s-]/g,
-      " "
-    )
+    .replace(/[^a-zA-Z0-9\s-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function cleanPhone(value) {
-  const original =
-    cleanText(value);
+  const original = cleanText(value);
+  const hasPlus = original.startsWith("+");
+  const digits = original.replace(/\D/g, "");
 
-  const hasPlus =
-    original.startsWith("+");
+  if (!digits) return "";
 
-  const digits =
-    original.replace(/\D/g, "");
-
-  if (!digits) {
-    return "";
-  }
-
-  return (
-    (hasPlus ? "+" : "") +
-    digits
-  );
+  return (hasPlus ? "+" : "") + digits;
 }
 
 function countryCode(value) {
-  const country =
-    cleanText(value);
-
-  const upper =
-    country.toUpperCase();
+  const country = cleanText(value);
+  const upper = country.toUpperCase();
 
   if (
     upper === "US" ||
     upper === "USA" ||
-    upper ===
-      "UNITED STATES" ||
-    upper ===
-      "UNITED STATES OF AMERICA"
+    upper === "UNITED STATES" ||
+    upper === "UNITED STATES OF AMERICA"
   ) {
     return "US";
   }
@@ -98,9 +77,30 @@ function countryCode(value) {
   return country;
 }
 
+function formatDate(value) {
+  const date = value
+    ? new Date(value)
+    : new Date();
+
+  if (Number.isNaN(date.getTime())) {
+    return new Date()
+      .toISOString()
+      .slice(0, 10);
+  }
+
+  return date
+    .toISOString()
+    .slice(0, 10);
+}
+
 function makeDsersSkuFromItem(
-  item
+  item,
+  product
 ) {
+  /*
+    1. If a real supplier SKU was provided,
+       use it.
+  */
   const supplierSku =
     cleanText(
       item.supplier_sku
@@ -115,51 +115,76 @@ function makeDsersSkuFromItem(
       item.product_id
     );
 
+  if (!productId) {
+    return "";
+  }
+
+  /*
+    2. If we already know the AliExpress
+       variant ID, preserve the existing
+       Southstar SKU behavior.
+  */
   const variantId =
     cleanText(
       item.supplier_variant_id
     );
 
-  const hasVariant =
-    Boolean(
-      cleanText(
-        item.variant_name
-      )
+  const variantName =
+    cleanText(
+      item.variant_name
     );
 
   if (
-    hasVariant &&
+    variantName &&
     variantId
   ) {
     return `SS-${productId}-${variantId}`;
   }
 
-  if (productId) {
-    return `SS-${productId}`;
-  }
+  /*
+    3. NEW:
+       If this is a variant but AliExpress
+       IDs/SKUs are blank, find that variant
+       in the Southstar product database.
 
-  return "";
-}
+       This keeps order SKUs identical to the
+       DSers Products CSV:
 
-function formatDate(value) {
-  const date =
-    value
-      ? new Date(value)
-      : new Date();
-
+       Variant 1 -> SS-productid-V1
+       Variant 2 -> SS-productid-V2
+       etc.
+  */
   if (
-    Number.isNaN(
-      date.getTime()
-    )
+    variantName &&
+    product
   ) {
-    return new Date()
-      .toISOString()
-      .slice(0, 10);
+    const variants =
+      Array.isArray(
+        product.variants
+      )
+        ? product.variants
+        : [];
+
+    const variantIndex =
+      variants.findIndex(
+        (variant) =>
+          cleanText(
+            variant?.name
+          ).toLowerCase() ===
+          variantName.toLowerCase()
+      );
+
+    if (
+      variantIndex >= 0
+    ) {
+      return `SS-${productId}-V${variantIndex + 1}`;
+    }
   }
 
-  return date
-    .toISOString()
-    .slice(0, 10);
+  /*
+    Non-variant fallback.
+  */
+  return `SS-${productId}`;
 }
 
 async function requireAdmin() {
@@ -168,22 +193,17 @@ async function requireAdmin() {
 
   const {
     data: { user },
-  } =
-    await s.auth.getUser();
+  } = await s.auth.getUser();
 
   if (!user) {
     return false;
   }
 
-  const { data } =
-    await s
-      .from("admins")
-      .select("user_id")
-      .eq(
-        "user_id",
-        user.id
-      )
-      .maybeSingle();
+  const { data } = await s
+    .from("admins")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   return Boolean(data);
 }
@@ -236,10 +256,7 @@ export async function GET(req) {
     } = await db
       .from("orders")
       .select("*")
-      .eq(
-        "id",
-        orderId
-      )
+      .eq("id", orderId)
       .maybeSingle();
 
     if (error) {
@@ -267,7 +284,9 @@ export async function GET(req) {
         ? order.items
         : [];
 
-    if (items.length === 0) {
+    if (
+      items.length === 0
+    ) {
       return Response.json(
         {
           error:
@@ -279,8 +298,69 @@ export async function GET(req) {
       );
     }
 
+    /*
+      Load the current Southstar products so
+      variant names can be converted to the
+      same V1/V2/V3 SKUs used in Product CSV.
+    */
+    const productIds = [
+      ...new Set(
+        items
+          .map((item) =>
+            cleanText(
+              item.product_id
+            )
+          )
+          .filter(Boolean)
+      ),
+    ];
+
+    let productMap =
+      new Map();
+
+    if (
+      productIds.length >
+      0
+    ) {
+      const {
+        data: products,
+        error:
+          productsError,
+      } = await db
+        .from("products")
+        .select(
+          "id, variants"
+        )
+        .in(
+          "id",
+          productIds
+        );
+
+      if (
+        productsError
+      ) {
+        throw new Error(
+          productsError.message
+        );
+      }
+
+      productMap =
+        new Map(
+          (products || []).map(
+            (product) => [
+              String(
+                product.id
+              ),
+              product,
+            ]
+          )
+        );
+    }
+
     const orderNumber =
-      cleanText(order.id) ||
+      cleanText(
+        order.id
+      ) ||
       cleanText(
         order.stripe_session_id
       );
@@ -313,52 +393,52 @@ export async function GET(req) {
       );
 
     const rows =
-      items.map(
-        (item) => [
+      items.map((item) => {
+        const productId =
+          cleanText(
+            item.product_id
+          );
+
+        const product =
+          productMap.get(
+            productId
+          );
+
+        const sku =
+          makeDsersSkuFromItem(
+            item,
+            product
+          );
+
+        return [
           orderNumber,
           date,
           country,
-
-          cleanText(
-            item.product_id
-          ),
-
-          makeDsersSkuFromItem(
-            item
-          ),
-
+          productId,
+          sku,
           Number(
             item.quantity || 1
           ),
-
           "",
-
           cleanText(
             order.customer_name
           ),
-
           phone,
-
           cleanText(
             order.customer_email
           ),
-
           address1,
           address2,
-
           cleanText(
             order.shipping_state
           ),
-
           cleanText(
             order.shipping_city
           ),
-
           cleanText(
             order
               .shipping_postal_code
           ),
-
           "",
           "",
           "",
@@ -367,8 +447,8 @@ export async function GET(req) {
           "",
           "",
           "",
-        ]
-      );
+        ];
+      });
 
     const csv =
       rowsToCsv(
@@ -376,18 +456,21 @@ export async function GET(req) {
         rows
       );
 
-    return new Response(csv, {
-      headers: {
-        "Content-Type":
-          "text/csv; charset=utf-8",
+    return new Response(
+      csv,
+      {
+        headers: {
+          "Content-Type":
+            "text/csv; charset=utf-8",
 
-        "Content-Disposition":
-          `attachment; filename="southstar-dsers-order-${orderId}.csv"`,
+          "Content-Disposition":
+            `attachment; filename="southstar-dsers-order-${orderId}.csv"`,
 
-        "Cache-Control":
-          "no-store",
-      },
-    });
+          "Cache-Control":
+            "no-store",
+        },
+      }
+    );
   } catch (error) {
     console.error(
       "DSers order export error:",
