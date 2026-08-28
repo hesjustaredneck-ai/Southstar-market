@@ -44,6 +44,12 @@ function cleanText(value) {
     .trim();
 }
 
+function skuPart(value) {
+  return cleanText(value)
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function cleanAddress(value) {
   return cleanText(value)
     .replace(/[^a-zA-Z0-9\s-]/g, " ")
@@ -93,14 +99,44 @@ function formatDate(value) {
     .slice(0, 10);
 }
 
+function getVariantSkuLabel(
+  variant,
+  variantIndex
+) {
+  const option1 =
+    skuPart(
+      variant?.option1_value
+    );
+
+  const option2 =
+    skuPart(
+      variant?.option2_value
+    );
+
+  if (option1 && option2) {
+    return `${option1}-${option2}`;
+  }
+
+  if (option1) {
+    return option1;
+  }
+
+  const variantName =
+    skuPart(
+      variant?.name
+    );
+
+  if (variantName) {
+    return variantName;
+  }
+
+  return `V${variantIndex + 1}`;
+}
+
 function makeDsersSkuFromItem(
   item,
   product
 ) {
-  /*
-    1. If a real supplier SKU was provided,
-       use it.
-  */
   const supplierSku =
     cleanText(
       item.supplier_sku
@@ -119,11 +155,6 @@ function makeDsersSkuFromItem(
     return "";
   }
 
-  /*
-    2. If we already know the AliExpress
-       variant ID, preserve the existing
-       Southstar SKU behavior.
-  */
   const variantId =
     cleanText(
       item.supplier_variant_id
@@ -134,6 +165,11 @@ function makeDsersSkuFromItem(
       item.variant_name
     );
 
+  /*
+    If an actual AliExpress variant ID
+    has already been stored, preserve
+    the existing mapping behavior.
+  */
   if (
     variantName &&
     variantId
@@ -142,17 +178,10 @@ function makeDsersSkuFromItem(
   }
 
   /*
-    3. NEW:
-       If this is a variant but AliExpress
-       IDs/SKUs are blank, find that variant
-       in the Southstar product database.
-
-       This keeps order SKUs identical to the
-       DSers Products CSV:
-
-       Variant 1 -> SS-productid-V1
-       Variant 2 -> SS-productid-V2
-       etc.
+    For Southstar variants, find the
+    matching current product variant
+    and create the same readable SKU
+    used by the Products CSV.
   */
   if (
     variantName &&
@@ -177,12 +206,23 @@ function makeDsersSkuFromItem(
     if (
       variantIndex >= 0
     ) {
-      return `SS-${productId}-V${variantIndex + 1}`;
+      const variant =
+        variants[
+          variantIndex
+        ];
+
+      const label =
+        getVariantSkuLabel(
+          variant,
+          variantIndex
+        );
+
+      return `SS-${productId}-${label}`;
     }
   }
 
   /*
-    Non-variant fallback.
+    Non-variant product fallback.
   */
   return `SS-${productId}`;
 }
@@ -299,9 +339,9 @@ export async function GET(req) {
     }
 
     /*
-      Load the current Southstar products so
-      variant names can be converted to the
-      same V1/V2/V3 SKUs used in Product CSV.
+      Load the current product variants
+      so order SKUs can use the same
+      readable names as Products CSV.
     */
     const productIds = [
       ...new Set(
