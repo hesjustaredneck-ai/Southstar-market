@@ -30,7 +30,22 @@ function buildVariants(fd, basePrice, baseCost) {
   const variantIds = fd.getAll("variant_id");
   const skus = fd.getAll("variant_sku");
 
-  const variants = [];
+  const option1Name = String(
+    fd.get("option1_name") || ""
+  ).trim();
+
+  const option2Name = String(
+    fd.get("option2_name") || ""
+  ).trim();
+
+  const option2Values = String(
+    fd.get("option2_values") || ""
+  )
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const baseVariants = [];
 
   for (let i = 0; i < names.length; i++) {
     const name = String(names[i] || "").trim();
@@ -45,7 +60,7 @@ function buildVariants(fd, basePrice, baseCost) {
       costs[i] || ""
     ).trim();
 
-    variants.push({
+    baseVariants.push({
       name,
 
       price:
@@ -68,7 +83,54 @@ function buildVariants(fd, basePrice, baseCost) {
     });
   }
 
-  return variants;
+  if (
+    !option2Name ||
+    option2Values.length === 0
+  ) {
+    if (!option1Name) {
+      return baseVariants;
+    }
+
+    return baseVariants.map((variant) => ({
+      ...variant,
+
+      option1_name: option1Name,
+      option1_value: variant.name,
+
+      option2_name: "",
+      option2_value: "",
+    }));
+  }
+
+  const expanded = [];
+
+  for (const variant of baseVariants) {
+    for (const option2Value of option2Values) {
+      expanded.push({
+        name: `${variant.name} / ${option2Value}`,
+
+        price: variant.price,
+        cost: variant.cost,
+
+        supplier_variant_id: "",
+        supplier_sku: "",
+
+        option1_name:
+          option1Name || "Option 1",
+
+        option1_value:
+          variant.name,
+
+        option2_name:
+          option2Name,
+
+        option2_value:
+          option2Value,
+      });
+    }
+  }
+
+  return expanded;
 }
 
 async function uploadImages(db, files) {
@@ -114,9 +176,7 @@ async function uploadImages(db, files) {
       .from("Product-image")
       .getPublicUrl(path);
 
-    imageUrls.push(
-      data.publicUrl
-    );
+    imageUrls.push(data.publicUrl);
   }
 
   return imageUrls;
@@ -127,8 +187,7 @@ async function addProduct(fd) {
 
   await requireAdmin();
 
-  const db =
-    createAdminClient();
+  const db = createAdminClient();
 
   const files = fd
     .getAll("images")
@@ -138,28 +197,24 @@ async function addProduct(fd) {
         file.size > 0
     );
 
-  const imageUrls =
-    await uploadImages(
-      db,
-      files
-    );
+  const imageUrls = await uploadImages(
+    db,
+    files
+  );
 
-  const basePrice =
-    Number(
-      fd.get("price") || 0
-    );
+  const basePrice = Number(
+    fd.get("price") || 0
+  );
 
-  const baseCost =
-    Number(
-      fd.get("cost") || 0
-    );
+  const baseCost = Number(
+    fd.get("cost") || 0
+  );
 
-  const variants =
-    buildVariants(
-      fd,
-      basePrice,
-      baseCost
-    );
+  const variants = buildVariants(
+    fd,
+    basePrice,
+    baseCost
+  );
 
   const { error } = await db
     .from("products")
@@ -169,14 +224,11 @@ async function addProduct(fd) {
       ),
 
       description: String(
-        fd.get(
-          "description"
-        ) || ""
+        fd.get("description") || ""
       ),
 
       category: String(
-        fd.get("category") ||
-          ""
+        fd.get("category") || ""
       ),
 
       image_url:
@@ -197,29 +249,21 @@ async function addProduct(fd) {
       ),
 
       supplier_url: String(
-        fd.get(
-          "supplier_url"
-        ) || ""
+        fd.get("supplier_url") || ""
       ),
 
       supplier_product_id:
         String(
-          fd.get(
-            "supplier_product_id"
-          ) || ""
+          fd.get("supplier_product_id") || ""
         ),
 
       supplier_variant_id:
         String(
-          fd.get(
-            "supplier_variant_id"
-          ) || ""
+          fd.get("supplier_variant_id") || ""
         ),
 
       supplier_sku: String(
-        fd.get(
-          "supplier_sku"
-        ) || ""
+        fd.get("supplier_sku") || ""
       ),
 
       variants,
@@ -245,14 +289,11 @@ async function updateProduct(fd) {
 
   await requireAdmin();
 
-  const db =
-    createAdminClient();
+  const db = createAdminClient();
 
-  const productId =
-    String(
-      fd.get("product_id") ||
-        ""
-    );
+  const productId = String(
+    fd.get("product_id") || ""
+  );
 
   if (!productId) {
     throw new Error(
@@ -266,10 +307,7 @@ async function updateProduct(fd) {
   } = await db
     .from("products")
     .select("*")
-    .eq(
-      "id",
-      productId
-    )
+    .eq("id", productId)
     .maybeSingle();
 
   if (
@@ -297,8 +335,7 @@ async function updateProduct(fd) {
       : [];
 
   let mainImage =
-    existing.image_url ||
-    "";
+    existing.image_url || "";
 
   if (files.length > 0) {
     imageUrls =
@@ -311,41 +348,33 @@ async function updateProduct(fd) {
       imageUrls[0] || "";
   }
 
-  const basePrice =
-    Number(
-      fd.get("price") || 0
-    );
+  const basePrice = Number(
+    fd.get("price") || 0
+  );
 
-  const baseCost =
-    Number(
-      fd.get("cost") || 0
-    );
+  const baseCost = Number(
+    fd.get("cost") || 0
+  );
 
-  const variants =
-    buildVariants(
-      fd,
-      basePrice,
-      baseCost
-    );
+  const variants = buildVariants(
+    fd,
+    basePrice,
+    baseCost
+  );
 
   const { error } = await db
     .from("products")
     .update({
       name: String(
-        fd.get("name") ||
-          ""
+        fd.get("name") || ""
       ),
 
       description: String(
-        fd.get(
-          "description"
-        ) || ""
+        fd.get("description") || ""
       ),
 
       category: String(
-        fd.get(
-          "category"
-        ) || ""
+        fd.get("category") || ""
       ),
 
       image_url:
@@ -366,37 +395,26 @@ async function updateProduct(fd) {
       ),
 
       supplier_url: String(
-        fd.get(
-          "supplier_url"
-        ) || ""
+        fd.get("supplier_url") || ""
       ),
 
       supplier_product_id:
         String(
-          fd.get(
-            "supplier_product_id"
-          ) || ""
+          fd.get("supplier_product_id") || ""
         ),
 
       supplier_variant_id:
         String(
-          fd.get(
-            "supplier_variant_id"
-          ) || ""
+          fd.get("supplier_variant_id") || ""
         ),
 
       supplier_sku: String(
-        fd.get(
-          "supplier_sku"
-        ) || ""
+        fd.get("supplier_sku") || ""
       ),
 
       variants,
     })
-    .eq(
-      "id",
-      productId
-    );
+    .eq("id", productId);
 
   if (error) {
     throw new Error(
@@ -412,22 +430,16 @@ async function toggleProduct(fd) {
 
   await requireAdmin();
 
-  const db =
-    createAdminClient();
+  const db = createAdminClient();
 
-  const productId =
-    String(
-      fd.get("product_id") ||
-        ""
-    );
+  const productId = String(
+    fd.get("product_id") || ""
+  );
 
   const currentActive =
     String(
-      fd.get(
-        "current_active"
-      )
-    ).toLowerCase() ===
-    "true";
+      fd.get("current_active")
+    ).toLowerCase() === "true";
 
   const { error } = await db
     .from("products")
@@ -435,10 +447,7 @@ async function toggleProduct(fd) {
       active:
         !currentActive,
     })
-    .eq(
-      "id",
-      productId
-    );
+    .eq("id", productId);
 
   if (error) {
     throw new Error(
@@ -454,20 +463,15 @@ async function deleteProduct(fd) {
 
   await requireAdmin();
 
-  const db =
-    createAdminClient();
+  const db = createAdminClient();
 
-  const productId =
-    String(
-      fd.get("product_id") ||
-        ""
-    );
+  const productId = String(
+    fd.get("product_id") || ""
+  );
 
   const confirmation =
     String(
-      fd.get(
-        "delete_confirmation"
-      ) || ""
+      fd.get("delete_confirmation") || ""
     )
       .trim()
       .toUpperCase();
@@ -484,10 +488,7 @@ async function deleteProduct(fd) {
   const { error } = await db
     .from("products")
     .delete()
-    .eq(
-      "id",
-      productId
-    );
+    .eq("id", productId);
 
   if (error) {
     throw new Error(
@@ -503,14 +504,11 @@ async function updateOrder(fd) {
 
   await requireAdmin();
 
-  const db =
-    createAdminClient();
+  const db = createAdminClient();
 
-  const orderId =
-    String(
-      fd.get("order_id") ||
-        ""
-    );
+  const orderId = String(
+    fd.get("order_id") || ""
+  );
 
   if (!orderId) {
     throw new Error(
@@ -524,10 +522,7 @@ async function updateOrder(fd) {
   } = await db
     .from("orders")
     .select("*")
-    .eq(
-      "id",
-      orderId
-    )
+    .eq("id", orderId)
     .maybeSingle();
 
   if (
@@ -541,21 +536,17 @@ async function updateOrder(fd) {
 
   const fulfillmentStatus =
     String(
-      fd.get(
-        "fulfillment_status"
-      ) || "unfulfilled"
+      fd.get("fulfillment_status") ||
+        "unfulfilled"
     );
 
   const supplierCostValue =
     String(
-      fd.get(
-        "supplier_cost"
-      ) || ""
+      fd.get("supplier_cost") || ""
     ).trim();
 
   const supplierCost =
-    supplierCostValue ===
-    ""
+    supplierCostValue === ""
       ? null
       : Number(
           supplierCostValue
@@ -582,29 +573,22 @@ async function updateOrder(fd) {
 
     tracking_number:
       String(
-        fd.get(
-          "tracking_number"
-        ) || ""
+        fd.get("tracking_number") || ""
       ).trim(),
 
     carrier:
       String(
-        fd.get("carrier") ||
-          ""
+        fd.get("carrier") || ""
       ).trim(),
 
     supplier_order_id:
       String(
-        fd.get(
-          "supplier_order_id"
-        ) || ""
+        fd.get("supplier_order_id") || ""
       ).trim(),
 
     supplier_order_status:
       String(
-        fd.get(
-          "supplier_order_status"
-        ) || ""
+        fd.get("supplier_order_status") || ""
       ).trim(),
 
     supplier_cost:
@@ -644,10 +628,7 @@ async function updateOrder(fd) {
   const { error } = await db
     .from("orders")
     .update(updates)
-    .eq(
-      "id",
-      orderId
-    );
+    .eq("id", orderId);
 
   if (error) {
     throw new Error(
@@ -781,9 +762,7 @@ function cleanDsersPhone(
     cleanText(value);
 
   const hasPlus =
-    original.startsWith(
-      "+"
-    );
+    original.startsWith("+");
 
   const digits =
     original.replace(
@@ -1244,7 +1223,7 @@ function VariantRow({
         defaultValue={
           variant?.name || ""
         }
-        placeholder="Variant name -- e.g. Black / Red"
+        placeholder="Option value -- e.g. Black / Red"
       />
 
       <input
@@ -1301,6 +1280,104 @@ function ProductEditor({
     )
       ? product.variants
       : [];
+
+  const isMultiOption =
+    variants.some(
+      (variant) =>
+        String(
+          variant
+            ?.option1_value ||
+            ""
+        ).trim() ||
+        String(
+          variant
+            ?.option2_value ||
+            ""
+        ).trim()
+    );
+
+  const option1Name =
+    isMultiOption
+      ? String(
+          variants.find(
+            (variant) =>
+              variant
+                ?.option1_name
+          )?.option1_name ||
+            ""
+        )
+      : "";
+
+  const option2Name =
+    isMultiOption
+      ? String(
+          variants.find(
+            (variant) =>
+              variant
+                ?.option2_name
+          )?.option2_name ||
+            ""
+        )
+      : "";
+
+  const option2Values =
+    isMultiOption
+      ? [
+          ...new Set(
+            variants
+              .map(
+                (variant) =>
+                  String(
+                    variant
+                      ?.option2_value ||
+                      ""
+                  ).trim()
+              )
+              .filter(Boolean)
+          ),
+        ]
+      : [];
+
+  const editableVariants =
+    isMultiOption
+      ? [
+          ...new Map(
+            variants
+              .map((variant) => {
+                const value =
+                  String(
+                    variant
+                      ?.option1_value ||
+                      ""
+                  ).trim();
+
+                return [
+                  value,
+                  {
+                    name:
+                      value,
+
+                    price:
+                      variant.price,
+
+                    cost:
+                      variant.cost,
+
+                    supplier_variant_id:
+                      "",
+
+                    supplier_sku:
+                      "",
+                  },
+                ];
+              })
+              .filter(
+                ([value]) =>
+                  Boolean(value)
+              )
+          ).values(),
+        ]
+      : variants;
 
   return (
     <details
@@ -1378,8 +1455,7 @@ function ProductEditor({
           />
 
           <label>
-            Replace product
-            images
+            Replace product images
 
             <input
               name="images"
@@ -1470,8 +1546,24 @@ function ProductEditor({
           <hr />
 
           <h3>
-            Variants
+            Product options
           </h3>
+
+          <p className="muted">
+            Option 1 uses the
+            variant rows below.
+            Option 2 can contain
+            many choices, one per
+            line.
+          </p>
+
+          <input
+            name="option1_name"
+            defaultValue={
+              option1Name
+            }
+            placeholder="Option 1 name -- e.g. Color"
+          />
 
           {[0, 1, 2, 3, 4, 5].map(
             (index) => (
@@ -1483,7 +1575,7 @@ function ProductEditor({
                   index + 1
                 }
                 variant={
-                  variants[
+                  editableVariants[
                     index
                   ] ||
                   null
@@ -1491,6 +1583,39 @@ function ProductEditor({
               />
             )
           )}
+
+          <hr />
+
+          <input
+            name="option2_name"
+            defaultValue={
+              option2Name
+            }
+            placeholder="Option 2 name -- e.g. Phone Model"
+          />
+
+          <textarea
+            name="option2_values"
+            defaultValue={
+              option2Values.join(
+                "\n"
+              )
+            }
+            placeholder={
+              "Option 2 values -- one per line\nFor iPhone 15\nFor iPhone 15 Pro\nFor iPhone 16"
+            }
+            style={{
+              minHeight:
+                "260px",
+            }}
+          />
+
+          <p className="muted">
+            Southstar will
+            automatically create
+            every Option 1 ×
+            Option 2 combination.
+          </p>
 
           <button
             type="submit"
@@ -1964,9 +2089,7 @@ function SupplierPrep({
               }}
             >
               <strong>
-                {index +
-                  1}
-                .{" "}
+                {index + 1}.{" "}
                 {item.product_name ||
                   "Product"}
               </strong>
@@ -3249,33 +3372,71 @@ export default async function Admin() {
           <hr />
 
           <h3>
-            Product variants
+            Product options
           </h3>
 
           <p className="muted">
-            Leave these blank
-            if the product has
-            no options.
+            Use Option 1 for
+            choices such as Color.
+            Option 2 is optional
+            and can contain many
+            values such as phone
+            models or sizes.
           </p>
+
+          <input
+            name="option1_name"
+            placeholder="Option 1 name -- e.g. Color"
+          />
 
           <VariantRow
             number={1}
           />
+
           <VariantRow
             number={2}
           />
+
           <VariantRow
             number={3}
           />
+
           <VariantRow
             number={4}
           />
+
           <VariantRow
             number={5}
           />
+
           <VariantRow
             number={6}
           />
+
+          <hr />
+
+          <input
+            name="option2_name"
+            placeholder="Option 2 name -- e.g. Phone Model"
+          />
+
+          <textarea
+            name="option2_values"
+            placeholder={
+              "Option 2 values -- one per line\nFor iPhone 15\nFor iPhone 15 Pro\nFor iPhone 16"
+            }
+            style={{
+              minHeight:
+                "260px",
+            }}
+          />
+
+          <p className="muted">
+            Southstar will
+            automatically create
+            every Option 1 ×
+            Option 2 combination.
+          </p>
 
           <button
             type="submit"
