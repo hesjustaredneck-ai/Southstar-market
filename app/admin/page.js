@@ -3141,7 +3141,7 @@ export default async function Admin() {
         {activeProducts.length >
         0 ? (
 <a
-  href="/api/dsers-products"
+  href={`/api/dsers-order?id=${order.id}`}
             className="btn"
             style={{
               display:
