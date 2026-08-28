@@ -16,11 +16,9 @@ function csvCell(value) {
 function rowsToCsv(headers, rows) {
   return [headers, ...rows]
     .map((row) =>
-      row
-        .map(csvCell)
-        .join(",")
+      row.map(csvCell).join(",")
     )
-    .join("\r\n");
+    .join("\n");
 }
 
 function cleanText(value) {
@@ -103,14 +101,9 @@ export async function GET() {
           ? product.variants
           : [];
 
-      if (
-        variants.length > 0
-      ) {
+      if (variants.length > 0) {
         variants.forEach(
-          (
-            variant,
-            index
-          ) => {
+          (variant, index) => {
             rows.push([
               product.id,
 
@@ -152,7 +145,6 @@ export async function GET() {
     }
 
     const csv =
-      "\uFEFF" +
       rowsToCsv(
         HEADERS,
         rows
