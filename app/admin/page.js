@@ -23,100 +23,741 @@ async function requireAdmin() {
   return user;
 }
 
-function buildVariants(fd, basePrice, baseCost) {
-  const names = fd.getAll("variant_name");
-  const prices = fd.getAll("variant_price");
-  const costs = fd.getAll("variant_cost");
-  const variantIds = fd.getAll("variant_id");
-  const skus = fd.getAll("variant_sku");
+/*
+  ---------------------------------------------------------
+  GENERIC SUPPLIER SKU IMPORTER
+  ---------------------------------------------------------
 
-  const option1Name = String(
-    fd.get("option1_name") || ""
+  Paste the complete text produced by:
+
+  DSers -> CSV Upload -> Check Product SKU
+
+  Example:
+
+  Sku:
+  10:350383#For iPhone 16 Plus;14:771#Grey
+  Color:
+  Grey
+  Material:
+  For iPhone 16 Plus
+  Price:
+  $5.99
+
+  Preview
+
+  This parser does NOT know or care that the product
+  is a phone case.
+
+  It simply extracts:
+
+  - supplier SKU
+  - supplier option values
+
+  It can therefore be reused for future products with
+  colors, sizes, materials, models, styles, etc.
+*/
+
+function normalizeMatchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseSupplierSkuImport(rawText) {
+  const text = String(rawText || "").trim();
+
+  if (!text) {
+    return [];
+  }
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => String(line || "").trim());
+
+  const records = [];
+
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    const skuMatch = line.match(/^sku\s*:\s*(.*)$/i);
+
+    if (!skuMatch) {
+      index += 1;
+      continue;
+    }
+
+    let sku = String(
+      skuMatch[1] || ""
+    ).trim();
+
+    if (!sku) {
+      let next = index + 1;
+
+      while (
+        next < lines.length &&
+        !lines[next]
+      ) {
+        next += 1;
+      }
+
+      sku = String(
+        lines[next] || ""
+      ).trim();
+
+      index = next;
+    }
+
+    const values = [];
+
+    let cursor = index + 1;
+
+    while (cursor < lines.length) {
+      const current = lines[cursor];
+
+      if (/^sku\s*:/i.test(current)) {
+        break;
+      }
+
+      if (/^preview$/i.test(current)) {
+        cursor += 1;
+        break;
+      }
+
+      const labelMatch =
+        current.match(
+          /^([^:]+)\s*:\s*(.*)$/
+        );
+
+      if (labelMatch) {
+        const label = String(
+          labelMatch[1] || ""
+        )
+          .trim()
+          .toLowerCase();
+
+        let value = String(
+          labelMatch[2] || ""
+        ).trim();
+
+        if (!value) {
+          let next = cursor + 1;
+
+          while (
+            next < lines.length &&
+            !lines[next]
+          ) {
+            next += 1;
+          }
+
+          const possibleValue =
+            String(
+              lines[next] || ""
+            ).trim();
+
+          if (
+            possibleValue &&
+            !/^[^:]+:\s*/.test(
+              possibleValue
+            ) &&
+            !/^preview$/i.test(
+              possibleValue
+            ) &&
+            !/^sku\s*:/i.test(
+              possibleValue
+            )
+          ) {
+            value =
+              possibleValue;
+
+            cursor =
+              next;
+          }
+        }
+
+        if (
+          value &&
+          label !== "sku" &&
+          label !== "price"
+        ) {
+          values.push(value);
+        }
+      }
+
+      cursor += 1;
+    }
+
+    if (sku) {
+      records.push({
+        sku,
+        values,
+      });
+    }
+
+    index = cursor;
+  }
+
+  return records;
+}
+
+/*
+  Scores how closely a Southstar option value matches
+  one of the supplier's option values.
+
+  Exact match wins.
+
+  It also handles small naming differences such as:
+
+  Southstar: Blue
+  Supplier: LIGHT BLUE
+
+  Southstar: Light grey
+  Supplier: Grey
+
+  This avoids product-specific alias tables.
+*/
+function supplierValueMatchScore(
+  storeValue,
+  supplierValue
+) {
+  const store =
+    normalizeMatchText(
+      storeValue
+    );
+
+  const supplier =
+    normalizeMatchText(
+      supplierValue
+    );
+
+  if (!store || !supplier) {
+    return 0;
+  }
+
+  if (store === supplier) {
+    return 100;
+  }
+
+  if (
+    store.length >= 3 &&
+    supplier.length >= 3 &&
+    (
+      store.includes(
+        supplier
+      ) ||
+      supplier.includes(
+        store
+      )
+    )
+  ) {
+    return 70;
+  }
+
+  const storeTokens =
+    new Set(
+      store.split(" ")
+    );
+
+  const supplierTokens =
+    new Set(
+      supplier.split(" ")
+    );
+
+  let common = 0;
+
+  for (const token of storeTokens) {
+    if (
+      token.length >= 2 &&
+      supplierTokens.has(
+        token
+      )
+    ) {
+      common += 1;
+    }
+  }
+
+  if (common === 0) {
+    return 0;
+  }
+
+  const totalUnique =
+    new Set([
+      ...storeTokens,
+      ...supplierTokens,
+    ]).size;
+
+  const ratio =
+    totalUnique > 0
+      ? common /
+        totalUnique
+      : 0;
+
+  return Math.round(
+    20 +
+      ratio * 30
+  );
+}
+
+function bestRecordValueScore(
+  optionValue,
+  recordValues
+) {
+  let best = 0;
+
+  for (
+    const supplierValue of
+      recordValues || []
+  ) {
+    const score =
+      supplierValueMatchScore(
+        optionValue,
+        supplierValue
+      );
+
+    if (score > best) {
+      best = score;
+    }
+  }
+
+  return best;
+}
+
+function findImportedSupplierSku(
+  importedRecords,
+  optionValues
+) {
+  const wanted =
+    (optionValues || [])
+      .map((value) =>
+        String(
+          value || ""
+        ).trim()
+      )
+      .filter(Boolean);
+
+  if (
+    wanted.length === 0 ||
+    !Array.isArray(
+      importedRecords
+    ) ||
+    importedRecords.length === 0
+  ) {
+    return "";
+  }
+
+  let bestRecord = null;
+  let bestScore = -1;
+
+  for (
+    const record of
+      importedRecords
+  ) {
+    const values =
+      Array.isArray(
+        record.values
+      )
+        ? record.values
+        : [];
+
+    if (
+      values.length === 0
+    ) {
+      continue;
+    }
+
+    const scores =
+      wanted.map(
+        (wantedValue) =>
+          bestRecordValueScore(
+            wantedValue,
+            values
+          )
+      );
+
+    /*
+      Require every Southstar option to have
+      at least a reasonable supplier match.
+    */
+    if (
+      scores.some(
+        (score) =>
+          score < 40
+      )
+    ) {
+      continue;
+    }
+
+    const total =
+      scores.reduce(
+        (sum, score) =>
+          sum + score,
+        0
+      );
+
+    if (
+      total > bestScore
+    ) {
+      bestScore = total;
+      bestRecord =
+        record;
+    }
+  }
+
+  return String(
+    bestRecord?.sku ||
+      ""
   ).trim();
+}
 
-  const option2Name = String(
-    fd.get("option2_name") || ""
-  ).trim();
+function existingVariantKey(
+  option1Value,
+  option2Value,
+  name = ""
+) {
+  const option1 =
+    normalizeMatchText(
+      option1Value
+    );
 
-  const option2Values = String(
-    fd.get("option2_values") || ""
-  )
-    .split("\n")
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const option2 =
+    normalizeMatchText(
+      option2Value
+    );
+
+  if (
+    option1 ||
+    option2
+  ) {
+    return `${option1}|||${option2}`;
+  }
+
+  return normalizeMatchText(
+    name
+  );
+}
+
+function makeExistingVariantMap(
+  existingVariants
+) {
+  const map = new Map();
+
+  for (
+    const variant of
+      existingVariants || []
+  ) {
+    const key =
+      existingVariantKey(
+        variant?.option1_value,
+        variant?.option2_value,
+        variant?.name
+      );
+
+    if (key) {
+      map.set(
+        key,
+        variant
+      );
+    }
+  }
+
+  return map;
+}
+
+function buildVariants(
+  fd,
+  basePrice,
+  baseCost,
+  existingVariants = []
+) {
+  const names =
+    fd.getAll(
+      "variant_name"
+    );
+
+  const prices =
+    fd.getAll(
+      "variant_price"
+    );
+
+  const costs =
+    fd.getAll(
+      "variant_cost"
+    );
+
+  const variantIds =
+    fd.getAll(
+      "variant_id"
+    );
+
+  const skus =
+    fd.getAll(
+      "variant_sku"
+    );
+
+  const option1Name =
+    String(
+      fd.get(
+        "option1_name"
+      ) || ""
+    ).trim();
+
+  const option2Name =
+    String(
+      fd.get(
+        "option2_name"
+      ) || ""
+    ).trim();
+
+  const option2Values =
+    String(
+      fd.get(
+        "option2_values"
+      ) || ""
+    )
+      .split("\n")
+      .map((value) =>
+        value.trim()
+      )
+      .filter(Boolean);
+
+  const importedRecords =
+    parseSupplierSkuImport(
+      fd.get(
+        "supplier_sku_import"
+      )
+    );
+
+  const existingMap =
+    makeExistingVariantMap(
+      existingVariants
+    );
 
   const baseVariants = [];
 
-  for (let i = 0; i < names.length; i++) {
-    const name = String(names[i] || "").trim();
+  for (
+    let i = 0;
+    i < names.length;
+    i++
+  ) {
+    const name =
+      String(
+        names[i] || ""
+      ).trim();
 
-    if (!name) continue;
+    if (!name) {
+      continue;
+    }
 
-    const priceValue = String(
-      prices[i] || ""
-    ).trim();
+    const priceValue =
+      String(
+        prices[i] || ""
+      ).trim();
 
-    const costValue = String(
-      costs[i] || ""
-    ).trim();
+    const costValue =
+      String(
+        costs[i] || ""
+      ).trim();
 
     baseVariants.push({
       name,
 
       price:
         priceValue !== ""
-          ? Number(priceValue)
+          ? Number(
+              priceValue
+            )
           : basePrice,
 
       cost:
         costValue !== ""
-          ? Number(costValue)
+          ? Number(
+              costValue
+            )
           : baseCost,
 
-      supplier_variant_id: String(
-        variantIds[i] || ""
-      ).trim(),
+      supplier_variant_id:
+        String(
+          variantIds[i] ||
+            ""
+        ).trim(),
 
-      supplier_sku: String(
-        skus[i] || ""
-      ).trim(),
+      supplier_sku:
+        String(
+          skus[i] ||
+            ""
+        ).trim(),
     });
   }
 
+  /*
+    No Option 2.
+  */
   if (
     !option2Name ||
-    option2Values.length === 0
+    option2Values.length ===
+      0
   ) {
     if (!option1Name) {
-      return baseVariants;
+      return baseVariants.map(
+        (variant) => {
+          const existing =
+            existingMap.get(
+              existingVariantKey(
+                "",
+                "",
+                variant.name
+              )
+            );
+
+          const importedSku =
+            findImportedSupplierSku(
+              importedRecords,
+              [
+                variant.name,
+              ]
+            );
+
+          return {
+            ...variant,
+
+            supplier_variant_id:
+              variant.supplier_variant_id ||
+              existing
+                ?.supplier_variant_id ||
+              "",
+
+            supplier_sku:
+              importedSku ||
+              variant.supplier_sku ||
+              existing
+                ?.supplier_sku ||
+              "",
+          };
+        }
+      );
     }
 
-    return baseVariants.map((variant) => ({
-      ...variant,
+    return baseVariants.map(
+      (variant) => {
+        const key =
+          existingVariantKey(
+            variant.name,
+            "",
+            variant.name
+          );
 
-      option1_name: option1Name,
-      option1_value: variant.name,
+        const existing =
+          existingMap.get(
+            key
+          );
 
-      option2_name: "",
-      option2_value: "",
-    }));
+        const importedSku =
+          findImportedSupplierSku(
+            importedRecords,
+            [
+              variant.name,
+            ]
+          );
+
+        return {
+          ...variant,
+
+          supplier_variant_id:
+            variant.supplier_variant_id ||
+            existing
+              ?.supplier_variant_id ||
+            "",
+
+          supplier_sku:
+            importedSku ||
+            variant.supplier_sku ||
+            existing
+              ?.supplier_sku ||
+            "",
+
+          option1_name:
+            option1Name,
+
+          option1_value:
+            variant.name,
+
+          option2_name:
+            "",
+
+          option2_value:
+            "",
+        };
+      }
+    );
   }
 
+  /*
+    Two-option product.
+
+    Every Option 1 × Option 2 combination is built.
+
+    For each combination we:
+
+    1. Try to match a SKU from newly pasted DSers data.
+    2. Otherwise preserve the already stored supplier SKU.
+  */
   const expanded = [];
 
-  for (const variant of baseVariants) {
-    for (const option2Value of option2Values) {
+  for (
+    const variant of
+      baseVariants
+  ) {
+    for (
+      const option2Value of
+        option2Values
+    ) {
+      const key =
+        existingVariantKey(
+          variant.name,
+          option2Value
+        );
+
+      const existing =
+        existingMap.get(
+          key
+        );
+
+      const importedSku =
+        findImportedSupplierSku(
+          importedRecords,
+          [
+            variant.name,
+            option2Value,
+          ]
+        );
+
       expanded.push({
-        name: `${variant.name} / ${option2Value}`,
+        name:
+          `${variant.name} / ${option2Value}`,
 
-        price: variant.price,
-        cost: variant.cost,
+        price:
+          variant.price,
 
-        supplier_variant_id: "",
-        supplier_sku: "",
+        cost:
+          variant.cost,
+
+        supplier_variant_id:
+          existing
+            ?.supplier_variant_id ||
+          "",
+
+        supplier_sku:
+          importedSku ||
+          existing
+            ?.supplier_sku ||
+          "",
 
         option1_name:
-          option1Name || "Option 1",
+          option1Name ||
+          "Option 1",
 
         option1_value:
           variant.name,
@@ -133,7 +774,10 @@ function buildVariants(fd, basePrice, baseCost) {
   return expanded;
 }
 
-async function uploadImages(db, files) {
+async function uploadImages(
+  db,
+  files
+) {
   const imageUrls = [];
 
   for (const file of files) {
@@ -148,23 +792,36 @@ async function uploadImages(db, files) {
       file.name
         .split(".")
         .pop()
-        ?.toLowerCase() || "jpg";
+        ?.toLowerCase() ||
+      "jpg";
 
     const path =
       `${Date.now()}-${randomUUID()}.${extension}`;
 
-    const buffer = Buffer.from(
-      await file.arrayBuffer()
-    );
+    const buffer =
+      Buffer.from(
+        await file.arrayBuffer()
+      );
 
-    const { error: uploadError } =
+    const {
+      error: uploadError,
+    } =
       await db.storage
-        .from("Product-image")
-        .upload(path, buffer, {
-          contentType:
-            file.type || "image/jpeg",
-          upsert: false,
-        });
+        .from(
+          "Product-image"
+        )
+        .upload(
+          path,
+          buffer,
+          {
+            contentType:
+              file.type ||
+              "image/jpeg",
+
+            upsert:
+              false,
+          }
+        );
 
     if (uploadError) {
       throw new Error(
@@ -172,108 +829,151 @@ async function uploadImages(db, files) {
       );
     }
 
-    const { data } = db.storage
-      .from("Product-image")
-      .getPublicUrl(path);
+    const { data } =
+      db.storage
+        .from(
+          "Product-image"
+        )
+        .getPublicUrl(
+          path
+        );
 
-    imageUrls.push(data.publicUrl);
+    imageUrls.push(
+      data.publicUrl
+    );
   }
 
   return imageUrls;
 }
 
-async function addProduct(fd) {
+async function addProduct(
+  fd
+) {
   "use server";
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
-  const files = fd
-    .getAll("images")
-    .filter(
-      (file) =>
-        file instanceof File &&
-        file.size > 0
+  const files =
+    fd
+      .getAll("images")
+      .filter(
+        (file) =>
+          file instanceof
+            File &&
+          file.size > 0
+      );
+
+  const imageUrls =
+    await uploadImages(
+      db,
+      files
     );
 
-  const imageUrls = await uploadImages(
-    db,
-    files
-  );
+  const basePrice =
+    Number(
+      fd.get("price") ||
+        0
+    );
 
-  const basePrice = Number(
-    fd.get("price") || 0
-  );
+  const baseCost =
+    Number(
+      fd.get("cost") ||
+        0
+    );
 
-  const baseCost = Number(
-    fd.get("cost") || 0
-  );
+  const variants =
+    buildVariants(
+      fd,
+      basePrice,
+      baseCost,
+      []
+    );
 
-  const variants = buildVariants(
-    fd,
-    basePrice,
-    baseCost
-  );
+  const { error } =
+    await db
+      .from("products")
+      .insert({
+        name:
+          String(
+            fd.get(
+              "name"
+            ) || ""
+          ),
 
-  const { error } = await db
-    .from("products")
-    .insert({
-      name: String(
-        fd.get("name") || ""
-      ),
+        description:
+          String(
+            fd.get(
+              "description"
+            ) || ""
+          ),
 
-      description: String(
-        fd.get("description") || ""
-      ),
+        category:
+          String(
+            fd.get(
+              "category"
+            ) || ""
+          ),
 
-      category: String(
-        fd.get("category") || ""
-      ),
+        image_url:
+          imageUrls[0] ||
+          "",
 
-      image_url:
-        imageUrls[0] || "",
+        image_urls:
+          imageUrls,
 
-      image_urls:
-        imageUrls,
+        price:
+          basePrice,
 
-      price:
-        basePrice,
+        cost:
+          baseCost,
 
-      cost:
-        baseCost,
+        supplier:
+          String(
+            fd.get(
+              "supplier"
+            ) ||
+              "aliexpress"
+          ),
 
-      supplier: String(
-        fd.get("supplier") ||
-          "aliexpress"
-      ),
+        supplier_url:
+          String(
+            fd.get(
+              "supplier_url"
+            ) || ""
+          ),
 
-      supplier_url: String(
-        fd.get("supplier_url") || ""
-      ),
+        supplier_product_id:
+          String(
+            fd.get(
+              "supplier_product_id"
+            ) || ""
+          ),
 
-      supplier_product_id:
-        String(
-          fd.get("supplier_product_id") || ""
-        ),
+        supplier_variant_id:
+          String(
+            fd.get(
+              "supplier_variant_id"
+            ) || ""
+          ),
 
-      supplier_variant_id:
-        String(
-          fd.get("supplier_variant_id") || ""
-        ),
+        supplier_sku:
+          String(
+            fd.get(
+              "supplier_sku"
+            ) || ""
+          ),
 
-      supplier_sku: String(
-        fd.get("supplier_sku") || ""
-      ),
+        variants,
 
-      variants,
+        auto_fulfill:
+          false,
 
-      auto_fulfill:
-        false,
-
-      active:
-        true,
-    });
+        active:
+          true,
+      });
 
   if (error) {
     throw new Error(
@@ -284,16 +984,22 @@ async function addProduct(fd) {
   redirect("/admin");
 }
 
-async function updateProduct(fd) {
+async function updateProduct(
+  fd
+) {
   "use server";
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
-  const productId = String(
-    fd.get("product_id") || ""
-  );
+  const productId =
+    String(
+      fd.get(
+        "product_id"
+      ) || ""
+    );
 
   if (!productId) {
     throw new Error(
@@ -304,11 +1010,15 @@ async function updateProduct(fd) {
   const {
     data: existing,
     error: existingError,
-  } = await db
-    .from("products")
-    .select("*")
-    .eq("id", productId)
-    .maybeSingle();
+  } =
+    await db
+      .from("products")
+      .select("*")
+      .eq(
+        "id",
+        productId
+      )
+      .maybeSingle();
 
   if (
     existingError ||
@@ -319,13 +1029,15 @@ async function updateProduct(fd) {
     );
   }
 
-  const files = fd
-    .getAll("images")
-    .filter(
-      (file) =>
-        file instanceof File &&
-        file.size > 0
-    );
+  const files =
+    fd
+      .getAll("images")
+      .filter(
+        (file) =>
+          file instanceof
+            File &&
+          file.size > 0
+      );
 
   let imageUrls =
     Array.isArray(
@@ -335,9 +1047,12 @@ async function updateProduct(fd) {
       : [];
 
   let mainImage =
-    existing.image_url || "";
+    existing.image_url ||
+    "";
 
-  if (files.length > 0) {
+  if (
+    files.length > 0
+  ) {
     imageUrls =
       await uploadImages(
         db,
@@ -345,76 +1060,113 @@ async function updateProduct(fd) {
       );
 
     mainImage =
-      imageUrls[0] || "";
+      imageUrls[0] ||
+      "";
   }
 
-  const basePrice = Number(
-    fd.get("price") || 0
-  );
+  const basePrice =
+    Number(
+      fd.get("price") ||
+        0
+    );
 
-  const baseCost = Number(
-    fd.get("cost") || 0
-  );
+  const baseCost =
+    Number(
+      fd.get("cost") ||
+        0
+    );
 
-  const variants = buildVariants(
-    fd,
-    basePrice,
-    baseCost
-  );
+  const variants =
+    buildVariants(
+      fd,
+      basePrice,
+      baseCost,
+      Array.isArray(
+        existing.variants
+      )
+        ? existing.variants
+        : []
+    );
 
-  const { error } = await db
-    .from("products")
-    .update({
-      name: String(
-        fd.get("name") || ""
-      ),
+  const { error } =
+    await db
+      .from("products")
+      .update({
+        name:
+          String(
+            fd.get(
+              "name"
+            ) || ""
+          ),
 
-      description: String(
-        fd.get("description") || ""
-      ),
+        description:
+          String(
+            fd.get(
+              "description"
+            ) || ""
+          ),
 
-      category: String(
-        fd.get("category") || ""
-      ),
+        category:
+          String(
+            fd.get(
+              "category"
+            ) || ""
+          ),
 
-      image_url:
-        mainImage,
+        image_url:
+          mainImage,
 
-      image_urls:
-        imageUrls,
+        image_urls:
+          imageUrls,
 
-      price:
-        basePrice,
+        price:
+          basePrice,
 
-      cost:
-        baseCost,
+        cost:
+          baseCost,
 
-      supplier: String(
-        fd.get("supplier") ||
-          "aliexpress"
-      ),
+        supplier:
+          String(
+            fd.get(
+              "supplier"
+            ) ||
+              "aliexpress"
+          ),
 
-      supplier_url: String(
-        fd.get("supplier_url") || ""
-      ),
+        supplier_url:
+          String(
+            fd.get(
+              "supplier_url"
+            ) || ""
+          ),
 
-      supplier_product_id:
-        String(
-          fd.get("supplier_product_id") || ""
-        ),
+        supplier_product_id:
+          String(
+            fd.get(
+              "supplier_product_id"
+            ) || ""
+          ),
 
-      supplier_variant_id:
-        String(
-          fd.get("supplier_variant_id") || ""
-        ),
+        supplier_variant_id:
+          String(
+            fd.get(
+              "supplier_variant_id"
+            ) || ""
+          ),
 
-      supplier_sku: String(
-        fd.get("supplier_sku") || ""
-      ),
+        supplier_sku:
+          String(
+            fd.get(
+              "supplier_sku"
+            ) || ""
+          ),
 
-      variants,
-    })
-    .eq("id", productId);
+        variants,
+      })
+      .eq(
+        "id",
+        productId
+      );
 
   if (error) {
     throw new Error(
@@ -425,29 +1177,42 @@ async function updateProduct(fd) {
   redirect("/admin");
 }
 
-async function toggleProduct(fd) {
+async function toggleProduct(
+  fd
+) {
   "use server";
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
-  const productId = String(
-    fd.get("product_id") || ""
-  );
+  const productId =
+    String(
+      fd.get(
+        "product_id"
+      ) || ""
+    );
 
   const currentActive =
     String(
-      fd.get("current_active")
-    ).toLowerCase() === "true";
+      fd.get(
+        "current_active"
+      )
+    ).toLowerCase() ===
+    "true";
 
-  const { error } = await db
-    .from("products")
-    .update({
-      active:
-        !currentActive,
-    })
-    .eq("id", productId);
+  const { error } =
+    await db
+      .from("products")
+      .update({
+        active:
+          !currentActive,
+      })
+      .eq(
+        "id",
+        productId
+      );
 
   if (error) {
     throw new Error(
@@ -458,20 +1223,28 @@ async function toggleProduct(fd) {
   redirect("/admin");
 }
 
-async function deleteProduct(fd) {
+async function deleteProduct(
+  fd
+) {
   "use server";
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
-  const productId = String(
-    fd.get("product_id") || ""
-  );
+  const productId =
+    String(
+      fd.get(
+        "product_id"
+      ) || ""
+    );
 
   const confirmation =
     String(
-      fd.get("delete_confirmation") || ""
+      fd.get(
+        "delete_confirmation"
+      ) || ""
     )
       .trim()
       .toUpperCase();
@@ -485,10 +1258,14 @@ async function deleteProduct(fd) {
     );
   }
 
-  const { error } = await db
-    .from("products")
-    .delete()
-    .eq("id", productId);
+  const { error } =
+    await db
+      .from("products")
+      .delete()
+      .eq(
+        "id",
+        productId
+      );
 
   if (error) {
     throw new Error(
@@ -499,16 +1276,22 @@ async function deleteProduct(fd) {
   redirect("/admin");
 }
 
-async function updateOrder(fd) {
+async function updateOrder(
+  fd
+) {
   "use server";
 
   await requireAdmin();
 
-  const db = createAdminClient();
+  const db =
+    createAdminClient();
 
-  const orderId = String(
-    fd.get("order_id") || ""
-  );
+  const orderId =
+    String(
+      fd.get(
+        "order_id"
+      ) || ""
+    );
 
   if (!orderId) {
     throw new Error(
@@ -517,13 +1300,18 @@ async function updateOrder(fd) {
   }
 
   const {
-    data: existingOrder,
+    data:
+      existingOrder,
     error: orderError,
-  } = await db
-    .from("orders")
-    .select("*")
-    .eq("id", orderId)
-    .maybeSingle();
+  } =
+    await db
+      .from("orders")
+      .select("*")
+      .eq(
+        "id",
+        orderId
+      )
+      .maybeSingle();
 
   if (
     orderError ||
@@ -536,17 +1324,22 @@ async function updateOrder(fd) {
 
   const fulfillmentStatus =
     String(
-      fd.get("fulfillment_status") ||
+      fd.get(
+        "fulfillment_status"
+      ) ||
         "unfulfilled"
     );
 
   const supplierCostValue =
     String(
-      fd.get("supplier_cost") || ""
+      fd.get(
+        "supplier_cost"
+      ) || ""
     ).trim();
 
   const supplierCost =
-    supplierCostValue === ""
+    supplierCostValue ===
+    ""
       ? null
       : Number(
           supplierCostValue
@@ -559,7 +1352,8 @@ async function updateOrder(fd) {
     ) / 100;
 
   const estimatedProfit =
-    supplierCost !== null &&
+    supplierCost !==
+      null &&
     Number.isFinite(
       supplierCost
     )
@@ -573,22 +1367,30 @@ async function updateOrder(fd) {
 
     tracking_number:
       String(
-        fd.get("tracking_number") || ""
+        fd.get(
+          "tracking_number"
+        ) || ""
       ).trim(),
 
     carrier:
       String(
-        fd.get("carrier") || ""
+        fd.get(
+          "carrier"
+        ) || ""
       ).trim(),
 
     supplier_order_id:
       String(
-        fd.get("supplier_order_id") || ""
+        fd.get(
+          "supplier_order_id"
+        ) || ""
       ).trim(),
 
     supplier_order_status:
       String(
-        fd.get("supplier_order_status") || ""
+        fd.get(
+          "supplier_order_status"
+        ) || ""
       ).trim(),
 
     supplier_cost:
@@ -625,10 +1427,14 @@ async function updateOrder(fd) {
       new Date().toISOString();
   }
 
-  const { error } = await db
-    .from("orders")
-    .update(updates)
-    .eq("id", orderId);
+  const { error } =
+    await db
+      .from("orders")
+      .update(updates)
+      .eq(
+        "id",
+        orderId
+      );
 
   if (error) {
     throw new Error(
@@ -651,7 +1457,9 @@ async function logout() {
 }
 
 /*
+  ---------------------------------------------------------
   DSERS CSV HELPERS
+  ---------------------------------------------------------
 */
 
 const DSERS_PRODUCT_HEADERS =
@@ -717,7 +1525,9 @@ function rowsToCsv(
     .join("\r\n");
 }
 
-function csvDownloadHref(csv) {
+function csvDownloadHref(
+  csv
+) {
   const content =
     `\uFEFF${csv}`;
 
@@ -729,7 +1539,9 @@ function csvDownloadHref(csv) {
   );
 }
 
-function cleanText(value) {
+function cleanText(
+  value
+) {
   return String(
     value || ""
   )
@@ -743,7 +1555,9 @@ function cleanText(value) {
 function cleanDsersAddress(
   value
 ) {
-  return cleanText(value)
+  return cleanText(
+    value
+  )
     .replace(
       /[^a-zA-Z0-9\s-]/g,
       " "
@@ -759,10 +1573,14 @@ function cleanDsersPhone(
   value
 ) {
   const original =
-    cleanText(value);
+    cleanText(
+      value
+    );
 
   const hasPlus =
-    original.startsWith("+");
+    original.startsWith(
+      "+"
+    );
 
   const digits =
     original.replace(
@@ -775,7 +1593,9 @@ function cleanDsersPhone(
   }
 
   return (
-    (hasPlus ? "+" : "") +
+    (hasPlus
+      ? "+"
+      : "") +
     digits
   );
 }
@@ -784,7 +1604,9 @@ function fullCountryName(
   value
 ) {
   const country =
-    cleanText(value);
+    cleanText(
+      value
+    );
 
   const upper =
     country.toUpperCase();
@@ -801,49 +1623,68 @@ function fullCountryName(
   return country;
 }
 
+function skuPart(
+  value
+) {
+  return cleanText(
+    value
+  )
+    .replace(
+      /[^a-zA-Z0-9]+/g,
+      "-"
+    )
+    .replace(
+      /^-+|-+$/g,
+      ""
+    );
+}
+
 function makeDsersSkuFromProduct(
   product,
   variant = null,
   variantIndex = 0
 ) {
-  const variantSupplierSku =
-    cleanText(
-      variant?.supplier_sku
-    );
-
-  if (
-    variantSupplierSku
-  ) {
-    return variantSupplierSku;
-  }
-
   if (variant) {
-    const variantId =
-      cleanText(
+    const option1 =
+      skuPart(
         variant
-          ?.supplier_variant_id
+          ?.option1_value
       );
 
-    if (variantId) {
-      return (
-        `SS-${product.id}-${variantId}`
+    const option2 =
+      skuPart(
+        variant
+          ?.option2_value
       );
+
+    let label = "";
+
+    if (
+      option1 &&
+      option2
+    ) {
+      label =
+        `${option1}-${option2}`;
+    } else if (
+      option1
+    ) {
+      label =
+        option1;
+    } else {
+      label =
+        skuPart(
+          variant?.name
+        );
+    }
+
+    if (!label) {
+      label =
+        `V${variantIndex + 1}`;
     }
 
     return (
-      `SS-${product.id}-V${variantIndex + 1}`
+      `SS-${product.id}-${label}`
     );
-  }
-
-  const productSupplierSku =
-    cleanText(
-      product.supplier_sku
-    );
-
-  if (
-    productSupplierSku
-  ) {
-    return productSupplierSku;
   }
 
   return `SS-${product.id}`;
@@ -852,46 +1693,36 @@ function makeDsersSkuFromProduct(
 function makeDsersSkuFromItem(
   item
 ) {
-  const supplierSku =
-    cleanText(
-      item.supplier_sku
-    );
-
-  if (supplierSku) {
-    return supplierSku;
-  }
-
   const productId =
     cleanText(
       item.product_id
     );
 
-  const variantId =
-    cleanText(
-      item.supplier_variant_id
-    );
+  if (!productId) {
+    return "";
+  }
 
-  const hasVariant =
-    Boolean(
-      cleanText(
-        item.variant_name
-      )
+  const variantName =
+    cleanText(
+      item.variant_name
     );
 
   if (
-    hasVariant &&
-    variantId
+    variantName
   ) {
-    return (
-      `SS-${productId}-${variantId}`
-    );
+    const label =
+      skuPart(
+        variantName
+      );
+
+    if (label) {
+      return (
+        `SS-${productId}-${label}`
+      );
+    }
   }
 
-  if (productId) {
-    return `SS-${productId}`;
-  }
-
-  return "";
+  return `SS-${productId}`;
 }
 
 function buildDsersProductsCsv(
@@ -900,7 +1731,8 @@ function buildDsersProductsCsv(
   const rows = [];
 
   for (
-    const product of products
+    const product of
+      products
   ) {
     const variants =
       Array.isArray(
@@ -951,11 +1783,13 @@ function buildDsersProductsCsv(
       ),
 
       cleanText(
-        product.supplier_url
+        product
+          .supplier_url
       ),
 
       cleanText(
-        product.supplier_sku
+        product
+          .supplier_sku
       ),
     ]);
   }
@@ -971,7 +1805,9 @@ function formatDsersDate(
 ) {
   const date =
     value
-      ? new Date(value)
+      ? new Date(
+          value
+        )
       : new Date();
 
   if (
@@ -1072,13 +1908,18 @@ function getDsersOrderMissingInfo(
   }
 
   items.forEach(
-    (item, index) => {
+    (
+      item,
+      index
+    ) => {
       const productId =
         cleanText(
           item.product_id
         );
 
-      if (!productId) {
+      if (
+        !productId
+      ) {
         missing.push(
           `Item ${index + 1} product ID`
         );
@@ -1104,9 +1945,12 @@ function buildDsersOrderCsv(
   items
 ) {
   const orderNumber =
-    cleanText(order.id) ||
     cleanText(
-      order.stripe_session_id
+      order.id
+    ) ||
+    cleanText(
+      order
+        .stripe_session_id
     );
 
   const date =
@@ -1137,61 +1981,67 @@ function buildDsersOrderCsv(
     );
 
   const rows =
-    items.map((item) => [
-      orderNumber,
-      date,
-      country,
+    items.map(
+      (item) => [
+        orderNumber,
+        date,
+        country,
 
-      cleanText(
-        item.product_id
-      ),
+        cleanText(
+          item.product_id
+        ),
 
-      makeDsersSkuFromItem(
-        item
-      ),
+        makeDsersSkuFromItem(
+          item
+        ),
 
-      Number(
-        item.quantity || 1
-      ),
+        Number(
+          item.quantity ||
+            1
+        ),
 
-      "",
+        "",
 
-      cleanText(
-        order.customer_name
-      ),
+        cleanText(
+          order
+            .customer_name
+        ),
 
-      mobile,
+        mobile,
 
-      cleanText(
-        order.customer_email
-      ),
+        cleanText(
+          order
+            .customer_email
+        ),
 
-      address1,
+        address1,
+        address2,
 
-      address2,
+        cleanText(
+          order
+            .shipping_state
+        ),
 
-      cleanText(
-        order.shipping_state
-      ),
+        cleanText(
+          order
+            .shipping_city
+        ),
 
-      cleanText(
-        order.shipping_city
-      ),
+        cleanText(
+          order
+            .shipping_postal_code
+        ),
 
-      cleanText(
-        order
-          .shipping_postal_code
-      ),
-
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-    ]);
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ]
+    );
 
   return rowsToCsv(
     DSERS_ORDER_HEADERS,
@@ -1208,10 +2058,18 @@ function VariantRow({
       style={{
         border:
           "1px solid #ddd",
-        padding: "14px",
-        borderRadius: "7px",
-        display: "grid",
-        gap: "10px",
+
+        padding:
+          "14px",
+
+        borderRadius:
+          "7px",
+
+        display:
+          "grid",
+
+        gap:
+          "10px",
       }}
     >
       <strong>
@@ -1221,7 +2079,8 @@ function VariantRow({
       <input
         name="variant_name"
         defaultValue={
-          variant?.name || ""
+          variant?.name ||
+          ""
         }
         placeholder="Option value -- e.g. Black / Red"
       />
@@ -1271,6 +2130,49 @@ function VariantRow({
   );
 }
 
+function SupplierSkuImporter() {
+  return (
+    <>
+      <hr />
+
+      <h3>
+        Supplier SKU importer
+      </h3>
+
+      <p className="muted">
+        In DSers, use Check
+        Product SKU for this
+        AliExpress product.
+        Copy the complete
+        results and paste them
+        below. Southstar will
+        automatically match
+        supplier SKUs to your
+        product variants.
+      </p>
+
+      <textarea
+        name="supplier_sku_import"
+        placeholder={
+          "Paste the complete DSers Check Product SKU results here.\n\nExample:\nSku:\n123:456#Large;14:771#Black\nColor:\nBlack\nSize:\nLarge\nPrice:\n$5.99"
+        }
+        style={{
+          minHeight:
+            "260px",
+        }}
+      />
+
+      <p className="muted">
+        Leave this blank on
+        later edits. Existing
+        supplier SKU mappings
+        are preserved
+        automatically.
+      </p>
+    </>
+  );
+}
+
 function ProductEditor({
   product,
 }) {
@@ -1303,7 +2205,8 @@ function ProductEditor({
             (variant) =>
               variant
                 ?.option1_name
-          )?.option1_name ||
+          )
+            ?.option1_name ||
             ""
         )
       : "";
@@ -1315,7 +2218,8 @@ function ProductEditor({
             (variant) =>
               variant
                 ?.option2_name
-          )?.option2_name ||
+          )
+            ?.option2_name ||
             ""
         )
       : "";
@@ -1333,7 +2237,9 @@ function ProductEditor({
                       ""
                   ).trim()
               )
-              .filter(Boolean)
+              .filter(
+                Boolean
+              )
           ),
         ]
       : [];
@@ -1343,41 +2249,59 @@ function ProductEditor({
       ? [
           ...new Map(
             variants
-              .map((variant) => {
-                const value =
-                  String(
-                    variant
-                      ?.option1_value ||
-                      ""
-                  ).trim();
+              .map(
+                (
+                  variant
+                ) => {
+                  const value =
+                    String(
+                      variant
+                        ?.option1_value ||
+                        ""
+                    ).trim();
 
-                return [
-                  value,
-                  {
-                    name:
-                      value,
+                  return [
+                    value,
+                    {
+                      name:
+                        value,
 
-                    price:
-                      variant.price,
+                      price:
+                        variant.price,
 
-                    cost:
-                      variant.cost,
+                      cost:
+                        variant.cost,
 
-                    supplier_variant_id:
-                      "",
+                      supplier_variant_id:
+                        "",
 
-                    supplier_sku:
-                      "",
-                  },
-                ];
-              })
+                      supplier_sku:
+                        "",
+                    },
+                  ];
+                }
+              )
               .filter(
                 ([value]) =>
-                  Boolean(value)
+                  Boolean(
+                    value
+                  )
               )
           ).values(),
         ]
       : variants;
+
+  const mappedCount =
+    variants.filter(
+      (variant) =>
+        Boolean(
+          String(
+            variant
+              ?.supplier_sku ||
+              ""
+          ).trim()
+        )
+    ).length;
 
   return (
     <details
@@ -1391,6 +2315,7 @@ function ProductEditor({
         style={{
           cursor:
             "pointer",
+
           fontWeight:
             "700",
         }}
@@ -1398,7 +2323,8 @@ function ProductEditor({
         {product.name}
         {" -- "}$
         {Number(
-          product.price || 0
+          product.price ||
+            0
         ).toFixed(2)}
         {" -- "}
         {product.active
@@ -1412,6 +2338,32 @@ function ProductEditor({
             "20px",
         }}
       >
+        {variants.length >
+          0 && (
+          <div
+            style={{
+              padding:
+                "12px",
+
+              marginBottom:
+                "16px",
+
+              border:
+                "1px solid #ddd",
+
+              borderRadius:
+                "8px",
+            }}
+          >
+            <strong>
+              Supplier SKU
+              mappings:
+            </strong>{" "}
+            {mappedCount}/
+            {variants.length}
+          </div>
+        )}
+
         <form
           action={
             updateProduct
@@ -1455,7 +2407,8 @@ function ProductEditor({
           />
 
           <label>
-            Replace product images
+            Replace product
+            images
 
             <input
               name="images"
@@ -1553,8 +2506,8 @@ function ProductEditor({
             Option 1 uses the
             variant rows below.
             Option 2 can contain
-            many choices, one per
-            line.
+            many choices, one
+            per line.
           </p>
 
           <input
@@ -1617,6 +2570,8 @@ function ProductEditor({
             Option 2 combination.
           </p>
 
+          <SupplierSkuImporter />
+
           <button
             type="submit"
             className="primary"
@@ -1655,7 +2610,9 @@ function ProductEditor({
             }
           />
 
-          <button type="submit">
+          <button
+            type="submit"
+          >
             {product.active
               ? "Deactivate product"
               : "Activate product"}
@@ -1692,7 +2649,9 @@ function ProductEditor({
             placeholder='Type "DELETE" to confirm'
           />
 
-          <button type="submit">
+          <button
+            type="submit"
+          >
             Delete product
           </button>
         </form>
@@ -1806,6 +2765,7 @@ function SupplierPrep({
     items.map(
       (item) => ({
         item,
+
         missing:
           getItemMissingInfo(
             item
@@ -1827,7 +2787,10 @@ function SupplierPrep({
 
   const totalExpectedSupplierCost =
     items.reduce(
-      (sum, item) => {
+      (
+        sum,
+        item
+      ) => {
         const quantity =
           Number(
             item.quantity ||
@@ -1849,110 +2812,124 @@ function SupplierPrep({
       0
     );
 
-  const prepText = [
-    "SOUTHSTAR SUPPLIER ORDER",
-    "",
-    `STATUS: ${
-      orderReady
-        ? "READY TO ORDER"
-        : "MISSING REQUIRED INFO"
-    }`,
-    "",
-    "CUSTOMER",
-    `${
-      order.customer_name ||
-      ""
-    }`,
-    `${
-      order.customer_email ||
-      ""
-    }`,
-    `${
-      order.customer_phone ||
-      ""
-    }`,
-    "",
-    "SHIP TO",
-    `${
-      order.shipping_address ||
-      ""
-    }`,
-    "",
-    "ITEMS",
+  const prepText =
+    [
+      "SOUTHSTAR SUPPLIER ORDER",
+      "",
 
-    ...items.flatMap(
-      (
-        item,
-        index
-      ) => {
-        const missing =
-          getItemMissingInfo(
-            item
+      `STATUS: ${
+        orderReady
+          ? "READY TO ORDER"
+          : "MISSING REQUIRED INFO"
+      }`,
+
+      "",
+
+      "CUSTOMER",
+
+      `${
+        order.customer_name ||
+        ""
+      }`,
+
+      `${
+        order.customer_email ||
+        ""
+      }`,
+
+      `${
+        order.customer_phone ||
+        ""
+      }`,
+
+      "",
+
+      "SHIP TO",
+
+      `${
+        order.shipping_address ||
+        ""
+      }`,
+
+      "",
+
+      "ITEMS",
+
+      ...items.flatMap(
+        (
+          item,
+          index
+        ) => {
+          const missing =
+            getItemMissingInfo(
+              item
+            );
+
+          return [
+            "",
+
+            `${index + 1}. ${
+              item.product_name ||
+              "Product"
+            }`,
+
+            item.variant_name
+              ? `Variant: ${item.variant_name}`
+              : null,
+
+            `Quantity: ${
+              item.quantity ||
+              1
+            }`,
+
+            item.supplier
+              ? `Supplier: ${item.supplier}`
+              : null,
+
+            item.supplier_product_id
+              ? `Product ID: ${item.supplier_product_id}`
+              : null,
+
+            item.supplier_variant_id
+              ? `Variant ID: ${item.supplier_variant_id}`
+              : null,
+
+            item.supplier_sku
+              ? `SKU: ${item.supplier_sku}`
+              : null,
+
+            item.supplier_cost !==
+              undefined &&
+            item.supplier_cost !==
+              null
+              ? `Supplier cost each: $${Number(
+                  item.supplier_cost ||
+                    0
+                ).toFixed(2)}`
+              : null,
+
+            item.supplier_url
+              ? `Supplier URL: ${item.supplier_url}`
+              : null,
+
+            missing.length >
+            0
+              ? `MISSING: ${missing.join(
+                  ", "
+                )}`
+              : "READY",
+          ].filter(
+            Boolean
           );
+        }
+      ),
 
-        return [
-          "",
-          `${index + 1}. ${
-            item.product_name ||
-            "Product"
-          }`,
+      "",
 
-          item.variant_name
-            ? `Variant: ${item.variant_name}`
-            : null,
-
-          `Quantity: ${
-            item.quantity ||
-            1
-          }`,
-
-          item.supplier
-            ? `Supplier: ${item.supplier}`
-            : null,
-
-          item.supplier_product_id
-            ? `Product ID: ${item.supplier_product_id}`
-            : null,
-
-          item.supplier_variant_id
-            ? `Variant ID: ${item.supplier_variant_id}`
-            : null,
-
-          item.supplier_sku
-            ? `SKU: ${item.supplier_sku}`
-            : null,
-
-          item.supplier_cost !==
-            undefined &&
-          item.supplier_cost !==
-            null
-            ? `Supplier cost each: $${Number(
-                item.supplier_cost ||
-                  0
-              ).toFixed(2)}`
-            : null,
-
-          item.supplier_url
-            ? `Supplier URL: ${item.supplier_url}`
-            : null,
-
-          missing.length >
-          0
-            ? `MISSING: ${missing.join(
-                ", "
-              )}`
-            : "READY",
-        ].filter(
-          Boolean
-        );
-      }
-    ),
-
-    "",
-    `EXPECTED SUPPLIER TOTAL: $${totalExpectedSupplierCost.toFixed(
-      2
-    )}`,
-  ].join("\n");
+      `EXPECTED SUPPLIER TOTAL: $${totalExpectedSupplierCost.toFixed(
+        2
+      )}`,
+    ].join("\n");
 
   return (
     <div
@@ -1997,7 +2974,8 @@ function SupplierPrep({
       >
         <h3
           style={{
-            margin: 0,
+            margin:
+              0,
           }}
         >
           Supplier Order
@@ -2016,12 +2994,7 @@ function SupplierPrep({
         </strong>
       </div>
 
-      <p
-        style={{
-          marginBottom:
-            "6px",
-        }}
-      >
+      <p>
         <strong>
           Fulfillment
           validation
@@ -2307,13 +3280,6 @@ function SupplierPrep({
             "13px",
         }}
       />
-
-      <p className="muted">
-        On iPhone, press and
-        hold inside this box
-        to select and copy the
-        order information.
-      </p>
     </div>
   );
 }
@@ -2329,15 +3295,8 @@ function DsersOrderExport({
     );
 
   const ready =
-    missing.length === 0;
-
-  const csv =
-    ready
-      ? buildDsersOrderCsv(
-          order,
-          items
-        )
-      : "";
+    missing.length ===
+    0;
 
   return (
     <div
@@ -2377,7 +3336,8 @@ function DsersOrderExport({
             ✓ Customer and
             product information
             needed for the DSers
-            order file is present.
+            order file is
+            present.
           </p>
 
           <p>
@@ -2399,10 +3359,13 @@ function DsersOrderExport({
               >
                 {item.product_name ||
                   "Product"}
+
                 {item.variant_name
                   ? ` -- ${item.variant_name}`
                   : ""}
+
                 <br />
+
                 <strong>
                   SKU:
                 </strong>{" "}
@@ -2607,11 +3570,15 @@ function OrderManager({
         </p>
 
         <p>
-          {order.customer_name}
+          {
+            order.customer_name
+          }
         </p>
 
         <p>
-          {order.customer_email}
+          {
+            order.customer_email
+          }
         </p>
 
         <p>
@@ -2910,7 +3877,9 @@ function OrderManager({
 
         <p>
           Status:{" "}
-          {order.payment_status}
+          {
+            order.payment_status
+          }
         </p>
 
         <p>
@@ -3140,11 +4109,6 @@ export default async function Admin() {
         product.active
     );
 
-  const dsersProductsCsv =
-    buildDsersProductsCsv(
-      activeProducts
-    );
-
   return (
     <main className="wrap">
       <div className="sectionHead">
@@ -3207,33 +4171,42 @@ export default async function Admin() {
         </h2>
 
         <p>
-          Southstar can now
-          prepare the product
-          and order files needed
-          for your DSers CSV
-          sales channel.
+          Southstar prepares
+          the product and order
+          files needed for your
+          DSers CSV sales
+          channel.
         </p>
 
         <p>
           <strong>
             Step 1:
           </strong>{" "}
-          Import your Southstar
-          products into DSers
-          and map them to their
-          AliExpress supplier
-          products.
+          For a new product,
+          use DSers Check
+          Product SKU and paste
+          its complete results
+          into that product's
+          Supplier SKU importer.
         </p>
 
         <p>
           <strong>
             Step 2:
           </strong>{" "}
-          When a customer order
-          is ready, download its
-          DSers Order CSV from
-          the order below and
-          upload it to DSers.
+          Save the product.
+          Southstar permanently
+          stores the matched
+          supplier SKUs.
+        </p>
+
+        <p>
+          <strong>
+            Step 3:
+          </strong>{" "}
+          Download the Products
+          CSV and import it into
+          DSers.
         </p>
 
         {activeProducts.length >
@@ -3282,11 +4255,9 @@ export default async function Admin() {
               "14px",
           }}
         >
-          This export contains
-          your active Southstar
-          products and variants.
-          Upload it under DSers
-          → CSV Upload → Product.
+          Upload this file
+          under DSers → CSV
+          Upload → Product.
         </p>
       </section>
 
@@ -3377,11 +4348,12 @@ export default async function Admin() {
 
           <p className="muted">
             Use Option 1 for
-            choices such as Color.
-            Option 2 is optional
-            and can contain many
-            values such as phone
-            models or sizes.
+            choices such as
+            Color. Option 2 is
+            optional and can
+            contain many values
+            such as models or
+            sizes.
           </p>
 
           <input
@@ -3417,13 +4389,13 @@ export default async function Admin() {
 
           <input
             name="option2_name"
-            placeholder="Option 2 name -- e.g. Phone Model"
+            placeholder="Option 2 name -- e.g. Size / Model"
           />
 
           <textarea
             name="option2_values"
             placeholder={
-              "Option 2 values -- one per line\nFor iPhone 15\nFor iPhone 15 Pro\nFor iPhone 16"
+              "Option 2 values -- one per line\nSmall\nMedium\nLarge"
             }
             style={{
               minHeight:
@@ -3433,10 +4405,13 @@ export default async function Admin() {
 
           <p className="muted">
             Southstar will
-            automatically create
-            every Option 1 ×
-            Option 2 combination.
+            automatically
+            create every
+            Option 1 × Option 2
+            combination.
           </p>
+
+          <SupplierSkuImporter />
 
           <button
             type="submit"

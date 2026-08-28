@@ -12,9 +12,7 @@ const HEADERS = [
   SOUTHSTAR -> DSERS PRODUCT EXPORT
   ---------------------------------------------------------
 
-  IMPORTANT:
-
-  There are TWO different SKUs involved:
+  Two different SKUs are involved:
 
   1. Southstar Store SKU
      Example:
@@ -24,33 +22,22 @@ const HEADERS = [
      Example:
      10:350383#For iPhone 16 Plus;14:771#Grey
 
-  They must NOT be mixed together.
+  These must remain separate.
 
-  For future products:
-  - if variant.supplier_sku exists, we export it directly.
-  - if product.supplier_sku exists for a non-variant product,
-    we export that directly.
+  Future products:
+  - variant.supplier_sku is used when available.
+  - product.supplier_sku is used for non-variant products.
 
-  The phone case below has a temporary automatic fallback because
-  we recovered its complete AliExpress option mapping from DSers.
+  The current Leather Case has a fallback mapping because we
+  recovered its AliExpress variant information directly from DSers.
 */
+
+const LEATHER_CASE_SUPPLIER_PRODUCT_ID =
+  "3256805858072800";
 
 
 /*
-  Current AliExpress product:
-  Luxury Magnetic Sheepskin Leather Case
-
-  AliExpress product ID:
-  3256805858072800
-
-  This fallback can eventually be removed after these supplier SKUs
-  are permanently stored inside each Southstar variant.
-*/
-const LEATHER_CASE_SUPPLIER_PRODUCT_ID = "3256805858072800";
-
-
-/*
-  AliExpress Material / phone-model mapping.
+  AliExpress phone-model mappings.
 */
 const LEATHER_CASE_MODEL_SKUS = {
   "for iphone 16 plus":
@@ -137,12 +124,10 @@ const LEATHER_CASE_MODEL_SKUS = {
 
 
 /*
-  AliExpress Color mapping.
+  AliExpress color mappings.
 
-  Southstar currently calls the first color "Light grey",
-  while AliExpress calls it "Grey".
-
-  Both names are accepted here.
+  Southstar may use slightly different customer-facing names,
+  so aliases are included where needed.
 */
 const LEATHER_CASE_COLOR_SKUS = {
   grey:
@@ -155,6 +140,9 @@ const LEATHER_CASE_COLOR_SKUS = {
     "14:771#Grey",
 
   "light blue":
+    "14:200013901",
+
+  blue:
     "14:200013901",
 
   green:
@@ -177,7 +165,9 @@ function csvCell(value) {
 
 function rowsToCsv(headers, rows) {
   return [headers, ...rows]
-    .map((row) => row.map(csvCell).join(","))
+    .map((row) =>
+      row.map(csvCell).join(",")
+    )
     .join("\n");
 }
 
@@ -189,29 +179,12 @@ function cleanText(value) {
 }
 
 
-/*
-  Used for matching option names/values safely.
-
-  Example:
-  "  LIGHT BLUE "
-  becomes:
-  "light blue"
-*/
 function normalize(value) {
   return cleanText(value)
     .toLowerCase();
 }
 
 
-/*
-  Makes text safe for the Southstar store SKU.
-
-  Example:
-
-  Dark Grey
-  ->
-  Dark-Grey
-*/
 function skuPart(value) {
   return cleanText(value)
     .replace(/[^a-zA-Z0-9]+/g, "-")
@@ -223,13 +196,8 @@ function skuPart(value) {
   ---------------------------------------------------------
   SOUTHSTAR STORE SKU
   ---------------------------------------------------------
-
-  This is OUR SKU.
-
-  It should remain readable and stable.
-
-  It is completely separate from the AliExpress SKU.
 */
+
 function getVariantSkuLabel(
   variant,
   variantIndex
@@ -242,40 +210,27 @@ function getVariantSkuLabel(
     variant?.option2_value
   );
 
-  /*
-    Two-option product.
 
-    Example:
-    Light-grey-For-iPhone-16-Plus
-  */
   if (option1 && option2) {
     return `${option1}-${option2}`;
   }
 
 
-  /*
-    One-option product.
-  */
   if (option1) {
     return option1;
   }
 
 
-  /*
-    Legacy variant.
-  */
   const variantName = skuPart(
     variant?.name
   );
+
 
   if (variantName) {
     return variantName;
   }
 
 
-  /*
-    Last-resort fallback.
-  */
   return `V${variantIndex + 1}`;
 }
 
@@ -286,13 +241,15 @@ function makeSouthstarSku(
   variantIndex = 0
 ) {
   if (variant) {
-    const label = getVariantSkuLabel(
-      variant,
-      variantIndex
-    );
+    const label =
+      getVariantSkuLabel(
+        variant,
+        variantIndex
+      );
 
     return `SS-${product.id}-${label}`;
   }
+
 
   return `SS-${product.id}`;
 }
@@ -300,24 +257,10 @@ function makeSouthstarSku(
 
 /*
   ---------------------------------------------------------
-  CURRENT PHONE CASE FALLBACK
+  LEATHER CASE SUPPLIER SKU
   ---------------------------------------------------------
-
-  Reconstructs the real AliExpress Supplier SKU from:
-
-  option1 = Color
-  option2 = phone model
-
-  Example:
-
-  Light grey
-  +
-  For iPhone 16 Plus
-
-  becomes:
-
-  10:350383#For iPhone 16 Plus;14:771#Grey
 */
+
 function makeLeatherCaseSupplierSku(
   variant
 ) {
@@ -343,7 +286,7 @@ function makeLeatherCaseSupplierSku(
 
 
   /*
-    Normal Southstar configuration:
+    Normal setup:
 
     Option 1 = Color
     Option 2 = iPhone Model
@@ -358,7 +301,7 @@ function makeLeatherCaseSupplierSku(
 
 
   /*
-    Also tolerate the options being reversed.
+    Also support reversed option order.
   */
   if (
     option2Name.includes("color") ||
@@ -370,7 +313,8 @@ function makeLeatherCaseSupplierSku(
 
 
   /*
-    If names are missing, use the known current structure.
+    Fallback for older variants where
+    option names may be missing.
   */
   if (!color && !model) {
     color = option1Value;
@@ -390,8 +334,7 @@ function makeLeatherCaseSupplierSku(
 
 
   /*
-    Don't fabricate a supplier SKU if either side
-    cannot be identified.
+    Never fabricate an AliExpress SKU.
   */
   if (!modelSku || !colorSku) {
     return "";
@@ -404,22 +347,17 @@ function makeLeatherCaseSupplierSku(
 
 /*
   ---------------------------------------------------------
-  UNIVERSAL SUPPLIER SKU
+  UNIVERSAL SUPPLIER SKU RESOLUTION
   ---------------------------------------------------------
 
-  Order of preference:
+  Priority:
 
-  1. Variant already contains a real supplier_sku.
-     This is how future products should normally work.
-
-  2. Known automatic fallback for the current phone case.
-
-  3. Product-level supplier_sku for products without variants.
-
-  4. Blank if we genuinely don't know the supplier SKU.
-
-  We NEVER put a fake Southstar SKU into the supplier-SKU column.
+  1. Stored variant supplier_sku
+  2. Current Leather Case fallback
+  3. Product supplier_sku for non-variant products
+  4. Blank when supplier SKU is unknown
 */
+
 function getSupplierSku(
   product,
   variant = null
@@ -430,18 +368,17 @@ function getSupplierSku(
         variant?.supplier_sku
       );
 
+
     if (storedVariantSupplierSku) {
       return storedVariantSupplierSku;
     }
 
 
-    /*
-      Current phone-case automatic fallback.
-    */
     const supplierProductId =
       cleanText(
         product?.supplier_product_id
       );
+
 
     if (
       supplierProductId ===
@@ -454,13 +391,14 @@ function getSupplierSku(
 
 
     /*
-      Sometimes the product ID has not been entered
-      into Southstar yet, but its supplier URL contains it.
+      Fallback if supplier_product_id was not
+      saved but the full AliExpress URL contains it.
     */
     const supplierUrl =
       cleanText(
         product?.supplier_url
       );
+
 
     if (
       supplierUrl.includes(
@@ -524,7 +462,7 @@ export async function GET() {
 
 
       /*
-        Variant product.
+        Product with variants.
       */
       if (variants.length > 0) {
         variants.forEach(
@@ -534,13 +472,13 @@ export async function GET() {
           ) => {
             rows.push([
               /*
-                DSers Product ID
+                Product ID
               */
               product.id,
 
 
               /*
-                OUR Southstar SKU
+                Southstar Store SKU
               */
               makeSouthstarSku(
                 product,
@@ -550,7 +488,7 @@ export async function GET() {
 
 
               /*
-                AliExpress supplier URL
+                AliExpress Supplier URL
               */
               cleanText(
                 product?.supplier_url
@@ -558,7 +496,7 @@ export async function GET() {
 
 
               /*
-                REAL AliExpress Supplier SKU
+                AliExpress Supplier SKU
               */
               getSupplierSku(
                 product,
@@ -567,6 +505,7 @@ export async function GET() {
             ]);
           }
         );
+
 
         continue;
       }
@@ -610,9 +549,6 @@ export async function GET() {
           "Content-Disposition":
             'attachment; filename="southstar-dsers-products.csv"',
 
-          /*
-            Prevent Safari / Vercel from serving an older CSV.
-          */
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
 
