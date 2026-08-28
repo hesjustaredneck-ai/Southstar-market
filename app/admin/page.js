@@ -2313,12 +2313,9 @@ function DsersOrderExport({
           )}
 
           <a
-            href={
-              csvDownloadHref(
-                csv
-              )
-            }
-            download={`southstar-dsers-order-${order.id}.csv`}
+            href={`/api/dsers-order?id=${encodeURIComponent(
+              order.id
+            )}`}
             className="btn"
             style={{
               display:
@@ -3140,8 +3137,8 @@ export default async function Admin() {
 
         {activeProducts.length >
         0 ? (
-<a
-  href={`/api/dsers-order?id=${order.id}`}
+          <a
+            href="/api/dsers-products"
             className="btn"
             style={{
               display:
